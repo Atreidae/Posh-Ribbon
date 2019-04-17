@@ -53,3 +53,29 @@ DEV's
     - If the module is not in the default location you can execute import-module C:\RibbonEdgePsRest\RibbonSBCEdge.psm1 (replacing the path where you have copied the module to)
 4. To discover what cmdlets are available execute: get-command –module RibbonSBCEdge. Full PowerShell cmdlet help is available for all cmdlets.
 5. For complete usage, see: http://www.allthingsuc.co.uk/powershell-module-for-sonus-sbc-10002000/
+
+Cmdlets Included
+
+        'Connect-UxGateway',
+        'Get-UxSystemInfo',
+        'Get-UxSystemCallStats',
+        'Get-UxSystemLog',
+        'Invoke-UxBackup',
+        'Get-UxResource',
+        'New-UxResource',
+        'Send-UxCommand',
+        'Remove-UxResource',
+        'Set-UxResource',
+        'Get-UxTransformationTable',
+        'Get-UxTransformationEntry',
+        'New-UxTransformationTable',
+        'New-UxTransformationEntry',
+        'Get-UxSipServerTable',
+        'Get-UxSipProfile',
+        'Get-UxSipServerTableEntry',
+        'New-UxSipProfile',
+        'Get-UxSignalGroup',
+        'New-UxSignalGroup',
+        'New-UxSipServerTable',
+        'New-UxSipServerEntry',
+        'Restart-UxGateway'
