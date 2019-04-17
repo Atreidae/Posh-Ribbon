@@ -43,10 +43,11 @@
 Function Connect-UxGateway {
     <#
 	.SYNOPSIS      
-	 This cmdlet connects to the Ribbon SBC and extracts the session token.
+	 This cmdlet connects to the Ribbon SBC and extracts the session token and places it into a custom PS Object called uxSession
 	 
 	.DESCRIPTION
-	This cmdlet connects to the Ribbon SBC and extracts the session token required for subsequent cmdlets.All other cmdlets will fail if this command is not successfully executed.
+    This cmdlet connects to the Ribbon SBC and extracts the session token required for subsequent cmdlets.
+    All other cmdlets will fail if this command is not successfully executed.
 	
 	.PARAMETER uxhostname
 	Enter here the hostname or IP address of the Ribbon SBC
@@ -61,10 +62,10 @@ Function Connect-UxGateway {
 	
 	.EXAMPLE
 	$Creds = Get-credential
-	connect-uxgateway -uxhostname lyncsbc01.allthingsuc.co.uk -Credentials $Creds
+	connect-uxgateway -uxhostname lyncsbc01.COMPANY.co.uk -Credentials $Creds
 
 	.OUTPUT
-	The cmdlet will return a web session variable which can be stored and used with multiple cmdlets.
+	The cmdlet will return a uxSession variable which can be stored and used with multiple cmdlets. - This object includes the name, websession and credentials.
 	
 	#>
     [cmdletbinding()]
