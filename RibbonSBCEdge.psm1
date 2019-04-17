@@ -1,20 +1,23 @@
 <#
     .SYNOPSIS 
-      This module allows access to Ribbon SBC Edge via PowerShell using REST API's
+      RibbonSBCEdge Powershell module allows access to Ribbon SBC Edge via PowerShell using REST API's.
 	 
 	.DESCRIPTION
-	  This module allows access to Ribbon SBC Edge via PowerShell using REST API's
-	  For  the module to run correctly following pre-requisites should be met:
+	  
+	  For the module to run correctly following pre-requisites should be met:
 	  1) PowerShell v4.0
 	  2) Ribbon SBC Edge on R3.0 or higher
 	  3) Create REST logon credentials (http://www.allthingsuc.co.uk/accessing-sonus-ux-with-rest-apis/)
-	
+    
+      Once you have created the account use help Connect-UxGateway to get started.
 	 
 	.NOTES
 		Name: RibbonEdge
-		Author: Vikas Jaswal (Modality Systems Ltd)
+        V2 Author: Chris Burns (GCIcom)
+        V1 Author: Vikas Jaswal (Modality Systems Ltd)
 		Additional cmdlets added by: Kjetil Lindløkken
         Additional cmdlets added by: Adrien Plessis
+        
 		
 		Version History:
 		Version 1.0 - 30/11/13 - Module Created - Vikas Jaswal
@@ -25,7 +28,7 @@
 		Version 1.5 - 03/10/18 - Added optional parameter to the get-uxsipprofile cmdlet to add id directly - Kjetil Lindløkken
 		Version 1.6 - 04/10/18 - Added new-uxsipprofile cmdlet - Kjetil Lindløkken
 		Version 1.7 - 20/12/18 - Match Ribbon rebranding, Update link to Ribbon Docs - Adrien Plessis
-		Version 2.0 - 15/04/19 - Rewrite for modern module design. And better use of [XML] accelerator. - Chris Burns
+		Version 2.0 - 15/04/19 - Rewrite for modern module design. And better use of [XML] accelerator and details switch. - Chris Burns
 		
 		Please use the script at your own risk!
 	
@@ -553,14 +556,147 @@ Function New-UxResource {
     }
 }	
 
+
+Function Send-UxCommand {
+    <#
+	.SYNOPSIS      
+	 This cmdlet initates a POST request to send commands to the UX resource. For full list of valid resources refer to https://support.sonus.net/display/UXAPIDOC/Resource+-+system
+	 
+	.DESCRIPTION      
+	 This cmdlet initates a POST request to modify existing UX resource. For full list of valid resources refer to https://support.sonus.net/display/UXAPIDOC/Resource+-+system
+	 
+	.PARAMETER resource
+	Enter a valid resource name here. For valid resource names refer to https://support.sonus.net/display/UXAPIDOC
+
+	
+	
+	.LINK
+	To find all the resources which can be queried, please refer to https://support.sonus.net/display/UXAPIDOC
+	
+	#>
+    
+    [cmdletbinding(SupportsShouldProcess = $True, ConfirmImpact = "High")]
+    Param(
+        [Parameter(Mandatory = $false, Position = 1)]
+        [PSCustomObject]$uxSession,
+
+        [Parameter(Mandatory = $true, Position = 0)]
+        [string]$Command,
+
+        [Parameter(Mandatory = $false, Position = 2)]
+        [string]$Arguments,
+
+        [Parameter(Mandatory = $false, Position = 3)]
+        [ValidateScript( { $Path = Split-path $_; if (!($Path | Test-path)) { Throw "Folder Must Exist" } return $true })]
+        [string]$OutPutFilename,
+
+        [Parameter(Mandatory = $false, Position = 4)]
+        [string]$ReturnElement,
+
+        [Parameter(Mandatory = $false, Position = 5)]
+        [pscredential]$Credentials
+
+    )
+    
+    #Region Getting Session
+    if ($uxSession) {
+        $uxSessionObj = $uxSession
+        $uxHost = $uxSession.host
+        $SessionVar = $uxSession.Session
+    }
+    else {
+        if ($DefaultSession) {
+            $uxSessionObj = $DefaultSession
+            $uxHost = $DefaultSession.host
+            $SessionVar = $DefaultSession.session
+        }
+        Else {
+            Throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity)."
+        }
+    }
+    #endregion
+
+    #Region Refeshing the token, if needed
+    #$ResponseCode = $((get-uxsysteminfo -uxSession $uxSessionObj).status.http_code)
+    #Write-verbose "Response code from Gateway $ResponseCode"	
+    #
+    #if ($ResponseCode -ne "200") {
+    #   Throw "Session Expired or problem connecting to Box - Rerun Connect-uxGateway"
+    #}
+    #endregion
+
+    # The Command MUST be in lowercase so converting
+    $url = "https://$uxHost/rest/system?action=$($command.ToLower())"
+    Write-verbose "Connecting to $url"
+    Write-verbose "Adding: $Arguments"
+    
+
+    $msg = "Running $Command on the $uxhost Gateway"
+    if ($PSCmdlet.ShouldProcess($($msg))) {
+        Try {
+            $options = @{
+                uri         = $url
+                Method      = "POST"
+                Body        = $Arguments
+                WebSession  = $SessionVar
+                ErrorAction = "Stop"
+            }
+            if ($OutPutFilename) { $options.OutFile = $OutPutFilename }
+
+            $uxrawdata = Invoke-RestMethod @options
+        }
+	
+        Catch {
+            throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_"
+        }
+	
+    
+        $Result = ([xml]$uxrawdata.trim()).root
+        $Success = $Result.status.http_code
+        
+        
+        If ( $Success -eq "401") {
+            #Existing Resource
+            throw "Error running Command .The error message is $_"
+        }
+
+
+        #If 500 message is returned
+        If ( $Success -eq "500") {
+            Write-Verbose -Message $uxrawdata
+            throw "Error running Command .The error message is $_"
+        }
+
+        #Check if connection was successful.HTTP code 200 is returned
+        If ( $Success -ne "200") {
+            #Unable to Login
+            throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_"
+        }
+
+    
+       
+	
+        # Return data and raw data in the verbose stream if needed.
+        Write-Verbose $uxrawdata
+        if ($ReturnElement) {
+            Return $Result.$ReturnElement    
+        }
+        Return $Result
+    }
+}
+
 #Function to delete a resource on UX. 200OK is returned when a resource is deleted successfully. 500 if resource did not exist or couldn't delete it
-Function global:remove-uxresource {
+Function Remove-UxResource {
     <#
 	.SYNOPSIS      
 	 This cmdlet initates a DELETE request to remove a UX resource. For full list of valid resources refer to https://support.sonus.net/display/UXAPIDOC
 	 
 	.DESCRIPTION      
-	 This cmdlet  initates a DELETE request to remove a UX resource. For full list of valid resources refer to https://support.sonus.net/display/UXAPIDOC.
+	 Whilst primarily used by the internal functions, you can use this function with your own scripts. 
+     As this is likely to overwrite some of your SBC settings the ConfirmPreferences have been set to HIGH!
+     If you would like to prevent the confirm prompt use -confirm:$false when calling this function.
+     This can be dangerous if you are looping consider yourself WARNED. :-)
+
 	 You can delete any resource which supports DELETE request.
 	 
 	.PARAMETER resource
@@ -585,54 +721,114 @@ Function global:remove-uxresource {
 	
 	#>
 
-    [cmdletbinding()]
+    [cmdletbinding(SupportsShouldProcess = $True, ConfirmImpact = "High")]
     Param(
         [Parameter(Mandatory = $false, Position = 0)]
-        [AllowEmptyString()]
-        [string]$args,
-		
+        [PSCustomObject]$uxSession,
+
         [Parameter(Mandatory = $true, Position = 1)]
-        [string]$resource
+        [string]$resource,
+
+        [Parameter(Mandatory = $false, Position = 2)]
+        [string]$ReturnElement,
+
+        [Parameter(Mandatory = $false, Position = 3)]
+        [string]$Arguments,
+
+        [Parameter(Mandatory = $false, Position = 4)]
+        [Int]$Index,
+
+        [Parameter(Mandatory = $false, Position = 5)]
+        [pscredential]$Credentials
+
     )
-	
-    #The URL  which will be passed to the UX
-    $url = "https://$uxhostname/rest/$resource"
-	
-    Try {
-        $uxrawdata = Invoke-RestMethod -Uri $url -Method DELETE -Body $args -WebSession $sessionvar -ErrorAction Stop
+
+    #Region Getting Session
+    if ($uxSession) {
+        $uxSessionObj = $uxSession
+        $uxHost = $uxSession.host
+        $SessionVar = $uxSession.Session
     }
-	
-    Catch {
-        throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_"
+    else {
+        if ($DefaultSession) {
+            $uxSessionObj = $DefaultSession
+            $uxHost = $DefaultSession.host
+            $SessionVar = $DefaultSession.session
+        }
+        Else {
+            Throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity)."
+        }
     }
-	
-    #Check if connection was successful.HTTP code 200 is returned
-    If ( $uxrawdata | select-string "<http_code>200</http_code>") {
-	
-        Write-Verbose $uxrawdata
-    }
-	
-    #If 500 message is returned
-    ElseIf ($uxrawdata | select-string "<http_code>500</http_code>") {
-        Write-Verbose -Message $uxrawdata
-        throw "Unable to delete the resource. Verify using `"get-uxresource`" cmdlet, the resource does exist before deleting"
-    }
-	
-    Else {
-        #Unable to Login
-        throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_"
+    #endregion
+    
+    if ($resource -contains "http://") {
+        Throw "Resource is not properly formatted. Please only pass the resource you wish to remove not the whole address such as transformationtable then index of the entry"
     }
 
-}	
+    #The URL  which will be passed to the UX
+    $url = "https://$uxHost/rest/$resource"
+    if ($index) { $url += "/$index" }
+    Write-verbose "Removing $url"
+    Write-verbose "With: $Arguments "
+    
+
+    $msg = "Deleting A New Entry to $resource on the $uxhost Gateway"
+    if ($index) { $msg += "with ID $Index" }
+    if ($PSCmdlet.ShouldProcess($($msg))) {
+        Try {
+            $uxrawdata = Invoke-RestMethod -Uri $url -Method DELETE -Body $Arguments -WebSession $sessionvar -ErrorAction Stop
+        }
+	
+        Catch {
+            throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_"
+        }
+	
+    
+        $Result = ([xml]$uxrawdata.trim()).root
+        $Success = $Result.status.http_code
+		
+        
+       
+
+    
+        If ( $Success -eq "401") {
+            #Existing Resource
+            throw "Error creating the new entry, is there an existing record at $url? .The error message is $_"
+        }
+
+
+        #If 500 message is returned
+        If ( $Success -eq "500") {
+            Write-Verbose -Message $uxrawdata
+            throw "Unable to create a new resource. Ensure you have entered a unique resource id.Verify this using `"get-uxresource`" cmdlet"
+        }
+
+        #Check if connection was successful.HTTP code 200 is returned
+        If ( $Success -ne "200") {
+            #Unable to Login
+            throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_"
+        }
+	
+        # Return data and raw data in the verbose stream if needed.
+        Write-Verbose $uxrawdata
+        if ($ReturnElement) {
+            Return $Result.$ReturnElement    
+        }
+        Return $Result
+    }
+}		
 
 #Function to create a modify and existing resource on the UX
-Function global:set-uxresource {
+Function Set-UxResource {
     <#
 	.SYNOPSIS      
 	 This cmdlet initates a POST request to modify existing UX resource. For full list of valid resources refer to https://support.sonus.net/display/UXAPIDOC
 	 
 	.DESCRIPTION      
-	 This cmdlet initates a POST request to modify existing UX resource. For full list of valid resources refer to https://support.sonus.net/display/UXAPIDOC.
+     Whilst primarily used by the internal functions, you can use this function with your own scripts. 
+     As this is likely to overwrite some of your SBC settings the ConfirmPreferences have been set to HIGH!
+     If you would like to prevent the confirm prompt use -confirm:$false when calling this function.
+     This can be dangerous if you are looping consider yourself WARNED. :-)
 	 
 	.PARAMETER resource
 	Enter a valid resource name here. For valid resource names refer to https://support.sonus.net/display/UXAPIDOC
@@ -658,72 +854,96 @@ Function global:set-uxresource {
 	
 	#>
 
-    [cmdletbinding()]
+    [cmdletbinding(SupportsShouldProcess = $True, ConfirmImpact = "High")]
     Param(
+        [Parameter(Mandatory = $false, Position = 5)]
+        [PSCustomObject]$uxSession,
+
         [Parameter(Mandatory = $true, Position = 0)]
-        [AllowEmptyString()]
-        [string]$args,
-		
+        [string]$resource,
+
+        [Parameter(Mandatory = $false, Position = 3)]
+        [string]$ReturnElement,
+
+        [Parameter(Mandatory = $false, Position = 2)]
+        [string]$Arguments,
+
         [Parameter(Mandatory = $true, Position = 1)]
-        [string]$resource
+        [Int]$Index,
+
+        [Parameter(Mandatory = $false, Position = 6)]
+        [pscredential]$Credentials
+
     )
-	
-    #Create the URL which will be passed to UX
-    $url = "https://$uxhostname/rest/$resource"
-	
-    Try {
-        $uxrawdata = Invoke-RestMethod -Uri $url -Method POST -Body $args -WebSession $sessionvar -ErrorAction Stop
+
+    #Region Getting Session
+    if ($uxSession) {
+        $uxSessionObj = $uxSession
+        $uxHost = $uxSession.host
+        $SessionVar = $uxSession.Session
     }
-	
-    Catch {
-        throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_"
+    else {
+        if ($DefaultSession) {
+            $uxSessionObj = $DefaultSession
+            $uxHost = $DefaultSession.host
+            $SessionVar = $DefaultSession.session
+        }
+        Else {
+            Throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity)."
+        }
     }
+    #endregion
 	
-    #Check if connection was successful.HTTP code 200 is returned
-    If ( $uxrawdata | select-string "<http_code>200</http_code>") {
-	
-        Write-Verbose $uxrawdata
-		
-        #Sanitise data and return as object
+    #The URL  which will be passed to the UX
+    $url = "https://$uxhostname/rest/$resource/$index"
+    Write-verbose "Editing $url"
+    Write-verbose "With: $Arguments "
+    
+
+    $msg = "Deleting A New Entry to $resource on the $uxhost Gateway with ID $Index"
+    if ($PSCmdlet.ShouldProcess($($msg))) {
         Try {
-            #Find any </status> and any whitespace following it
-            $regex = [regex]'</status>\s+'
-
-            write-verbose $regex.matches($uxrawdata)
-
-            #Find the index of the point where </status> and whitespace following it ends.
-            #To find this add the Index and length properties of the regex object
-            $strstart = $regex.Match($uxrawdata).index + $regex.Match($uxrawdata).length
-
-            #Now find </root> and any whitespace preceding it.
-            $regex1 = [regex]'\s+</root>'
-            $strend = $regex1.Match($uxrawdata).index
-			
-            #Fully formatted XML object
-            [xml]$uxdataformatted = $uxrawdata.substring($strstart, $strend - $strstart)
+            $uxrawdata = Invoke-RestMethod -Uri $url -Method POST -Body $Arguments -WebSession $sessionvar -ErrorAction Stop
         }
+	
         Catch {
-            throw "Unable to convert received data into XML correctly. The error message is $_.`nDisplaying rawxml $uxrawdata" 
+            throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_"
         }
+	
+    
+        $Result = ([xml]$uxrawdata.trim()).root
+        $Success = $Result.status.http_code
 		
-    }
+    
+        If ( $Success -eq "401") {
+            #Existing Resource
+            throw "Error creating the new entry, is there an existing record at $url? .The error message is $_"
+        }
+
+
+        #If 500 message is returned
+        If ( $Success -eq "500") {
+            Write-Verbose -Message $uxrawdata
+            throw "Unable to create a new resource. Ensure you have entered a unique resource id.Verify this using `"get-uxresource`" cmdlet"
+        }
+
+        #Check if connection was successful.HTTP code 200 is returned
+        If ( $Success -ne "200") {
+            #Unable to Login
+            throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_"
+        }
 	
-    #If 500 message is returned
-    ElseIf ($uxrawdata | select-string "<http_code>500</http_code>") {
-        Write-Verbose -Message $uxrawdata
-        throw "Unable to modify the resource. Ensure the resource exists. You can verify this using `"get-uxresource`""
+        # Return data and raw data in the verbose stream if needed.
+        Write-Verbose $uxrawdata
+        if ($ReturnElement) {
+            Return $Result.$ReturnElement    
+        }
+        Return $Result
     }
-	
-    Else {
-        #Unable to Login
-        throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_"
-    }
-    #Return fully formatted XML object
-    write-verbose $uxdataformatted
 }	
 
 
-Function get-UxTransformationTable {
+Function Get-UxTransformationTable {
 
     <#
 	.SYNOPSIS      
@@ -767,7 +987,7 @@ Function get-UxTransformationTable {
     
 }
 
-Function get-UxTransformationEntry {
+Function Get-UxTransformationEntry {
     <#
 	.SYNOPSIS      
 	 This cmdlet reports The Transformation from Ribbon SBC.
@@ -789,10 +1009,10 @@ Function get-UxTransformationEntry {
     Param(
         #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
         #Else it will look for the last created session using the command above
-        [Parameter(Mandatory = $false, Position = 0)]
+        [Parameter(Mandatory = $false, Position = 1)]
         [PSCustomObject]$uxSession,
         #To find the ID of the transformation table execute "get-uxtransformationtable" cmdlet'
-        [Parameter(Mandatory = $true, Position = 1)]
+        [Parameter(Mandatory = $true, Position = 0)]
         [ValidateRange(1, [int]::MaxValue)]
         [int]$uxTransformationTableId
 
@@ -815,7 +1035,7 @@ Function get-UxTransformationEntry {
     
 }
 
-#Function to get transformation table
+<##Function to get transformation table
 Function get-uxtransformationtableOLD {
     <#
 	.SYNOPSIS      
@@ -824,7 +1044,7 @@ Function get-uxtransformationtableOLD {
 	.EXAMPLE
 	 get-uxtransformationtable
 	
-	#>
+	
 
     [cmdletbinding()]
     Param()
@@ -944,7 +1164,7 @@ Function global:get-uxtransformationentryOLD {
 	.EXAMPLE
 	 get-uxtransformationentry -uxtransformationtableid 4
 	
-	#>
+	
     [cmdletbinding()]
     Param(
         [Parameter(Mandatory = $true, Position = 0, HelpMessage = 'To find the ID of the transformation table execute "get-uxtransformationtable" cmdlet')]
@@ -1079,6 +1299,7 @@ Function global:get-uxtransformationentryOLD {
     #This object contains all the transformation tables with id to description mapping
     $objResult
 }
+#>
 
 Function New-UxTransformationTable {
     <#
@@ -1094,7 +1315,7 @@ Function New-UxTransformationTable {
 	.EXAMPLE
 	 new-uxtransformationtable -Description "LyncToPBX"
 	
-	#>
+        #>
     [cmdletbinding(SupportsShouldProcess = $True, ConfirmImpact = "High")]
     Param(
         #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
@@ -1106,7 +1327,7 @@ Function New-UxTransformationTable {
         [ValidateLength(1, 64)]
         [string]$Description
     )
-    
+        
 
     # First thing we need to do is get a new TableId
     try {
@@ -1142,7 +1363,7 @@ Function New-UxTransformationTable {
 
 }
 
-
+<#
 #Function to create new transformation table
 Function global:new-uxtransformationtableOLD {
     <#
@@ -1158,7 +1379,7 @@ Function global:new-uxtransformationtableOLD {
 	.EXAMPLE
 	 new-uxtransformationtable -Description "LyncToPBX"
 	
-	#>
+	
     [cmdletbinding()]
     Param(
         [Parameter(Mandatory = $true, Position = 0)]
@@ -1212,6 +1433,8 @@ Function global:new-uxtransformationtableOLD {
     #Return Transformation table object just created
     write-verbose $uxdataxml.transformationtable
 }
+
+#>
 
 #Function to create new transformation table entry
 Function New-UxTransformationEntry {
@@ -1293,7 +1516,7 @@ Function New-UxTransformationEntry {
         [ValidateLength(1, 256)]
         [string]$OutputFieldValue,
 		
-        [Parameter(Mandatory = $false, Position = 6)]
+        [Parameter(Mandatory = $true, Position = 6)]
         [ValidateLength(1, 64)]
         [string]$Description,
 		
@@ -1341,7 +1564,7 @@ Function New-UxTransformationEntry {
 
     Write-Verbose "Submitting Data"
     Write-verbose "Returning the updated table"
-    $msg = "Adding A New Entry to Transformation Table on the Gateway with ID $NewTransformationTableId"
+    $msg = "Adding A New Entry to transformationtable/$TransformationTableId/transformationentry Table on the Gateway with ID $NewTransformationTableId"
     if ($PSCmdlet.ShouldProcess($($msg))) {
         $Return = new-uxresource @ResourceSplat -WhatIf:$PSBoundParameters.ContainsKey('WhatIf') -Confirm:$false      
     }
@@ -1369,30 +1592,47 @@ Function Get-UxSipServerTable {
     Param(
         #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
         #Else it will look for the last created session using the command above
+        [Parameter(Mandatory = $false, Position = 1)]
+        [PSCustomObject]$uxSession,
+
         [Parameter(Mandatory = $false, Position = 0)]
-        [PSCustomObject]$uxSession
+        [PSCustomObject]$uxSipServerTableId
+        
         
     )
     Write-verbose "Called $($MyInvocation.MyCommand)"
     #$resource = Get-UxResourceName -functionname $MyInvocation.MyCommand
     
-    $ResourceSplat = @{
-        resource      = "sipservertable"
-        ReturnElement = "sipservertable_list"
-        detail        = $true
+    if ($uxSipServerTableId) {
+        $ResourceSplat = @{
+            resource      = "sipservertable/$uxSipServerTableId/sipserver"
+            ReturnElement = "sipserver_list"
+            Details       = $true
+        }
+    }
+    else {
+        $ResourceSplat = @{
+            resource      = "sipservertable"
+            ReturnElement = "sipservertable_list"
+            detail        = $true
+        }
     }
     if ($uxSession) { $ResourceSplat.uxSession = $uxSession }
 
     #Further filtering of the object for this option - Here we want to see the whole details of the object.
     $Return = get-uxresource @ResourceSplat
-    Write-Output $return.sipservertable
- 
+    if ($uxSipServerTableId) {
+        Write-Output $return.sipserver
+    }
+    else {
+        Write-Output $return.sipservertable
+    }
 
 
 }
 
 #Function to create new sipserver table
-Function global:new-uxsipservertable {
+Function New-UxSipServerTable {
     <#
 	.SYNOPSIS      
 	 This cmdlet creates a new sipserver table (not sipserver table entry)
@@ -1407,62 +1647,55 @@ Function global:new-uxsipservertable {
 	 new-uxsipservertable -Description "LyncToPBX"
 	
 	#>
-    [cmdletbinding()]
+    [cmdletbinding(SupportsShouldProcess = $True, ConfirmImpact = "High")]
     Param(
+        #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
+        #Else it will look for the last created session using the command above
+        [Parameter(Mandatory = $false, Position = 1)]
+        [PSCustomObject]$uxSession,
+        #Description of the new tablle
         [Parameter(Mandatory = $true, Position = 0)]
         [ValidateLength(1, 64)]
         [string]$Description
     )
-	
-    #DEPENDENCY ON get-uxsipservertable FUNCTION TO GET THE NEXT AVAILABLE SIPSERVER TABLEID
-    Try {
-        $sipservertableid = ((get-uxsipservertableentry | select -ExpandProperty id | Measure-Object -Maximum).Maximum) + 1
+    
+    # First thing we need to do is get a new TableId
+    try {
+        if ($uxSession) {
+            [int]$sipservertableid = (get-uxsipservertable -uxSession $uxSession | Select -ExpandProperty id | measure -Maximum).Maximum + 1 
+        }
+        else {
+            [int]$sipservertableid = (get-uxsipservertable | Select -ExpandProperty id | measure -Maximum).Maximum + 1 
+        }
     }
-    Catch {
-        throw "Command failed when trying to execute the sipservertableid using `"get-uxsipservertable`" cmdlet.The error is $_"
+    catch {
+        Throw "Unable to get a new table id"
     }
-	
-    #URL for the new sipserver table
-    $url = "https://$uxhostname/rest/sipservertable/$sipservertableid"
-	
-    Try {
-        $uxrawdata = Invoke-RestMethod -Uri $url -Method PUT -Body "Description=$Description" -WebSession $sessionvar -ErrorAction Stop
+
+    
+    #Lets create the information to upload, this nees to be in HTTP format for the PUT
+    $HTTPDescription = "Description=$Description"
+
+    $ResourceSplat = @{
+        resource      = "sipservertable"
+        index         = $sipservertableid
+        ReturnElement = "sipservertable"
+        Arguments     = $HTTPDescription
     }
-	
-    Catch {
-        throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_"
+    if ($uxSession) { $ResourceSplat.uxSession = $uxSession }
+
+    Write-Verbose "Submitting Data"
+    Write-verbose "Returning the updated table"
+    $msg = "Adding A New Entry to sipservertable Table on the Gateway with ID $sipservertableid"
+    if ($PSCmdlet.ShouldProcess($($msg))) {
+        $Return = new-uxresource @ResourceSplat -WhatIf:$PSBoundParameters.ContainsKey('WhatIf') -Confirm:$false      
     }
-    #If table is successfully created, 200OK is returned
-    If ( $uxrawdata | select-string "<http_code>200</http_code>") {
-	
-        Write-Verbose -Message $uxrawdata
-    }
-    #If 500 message is returned
-    ElseIf ($uxrawdata | select-string "<http_code>500</http_code>") {
-        Write-Verbose -Message $uxrawdata
-        throw "Unable to create sipserver table. Ensure you have entered a unique sipserver table id"
-    }
-    #If no 200 or 500 message
-    Else {
-        #Unable to Login
-        throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_"
-    }
-	
-    #Sanitise data and return as object for verbose only
-    Try {
-        $m = $uxrawdata.IndexOf("<sipservertable id=")
-        $length = ($uxrawdata.length - $m - 8)
-        [xml]$uxdataxml = $uxrawdata.substring($m, $length)
-    }
-    Catch {
-        throw "Unable to convert received data into XML correctly. The error message is $_"
-    }
-    #Return sipserver table object just created
-    write-verbose $uxdataxml.sipservertable
+    Write-Output $return.transformationtable
+
 }
 
 #Function to create new sipserver entry
-Function global:new-uxsipserverentry {
+Function New-UxSipServerEntry {
     <#
 	.SYNOPSIS      
 	 This cmdlet creates a new host/domain in existing sipserver table
@@ -1526,64 +1759,64 @@ Function global:new-uxsipserverentry {
 
 
 	.EXAMPLE
-	Assume you want to create a new transformation table.
-	First determine the ID of the transformation table in which you want to create the new transformation entry.
-	
-	get-uxtransformationtable
-
-	This example creates an Optional (default) transformation entry converting Called Number range  2400 - 2659  to Called Number +44123456XXXX
-	
-	new-uxtransformationentry -TransformationTableId 6 -InputFieldType 0 -InputFieldValue '^(2([45]\d{2}|6[0-5]\d))$' -OutputFieldType 0 -OutputFieldValue '+44123456\1' -Description "ExtToDDI"
 	
 	.EXAMPLE
-	This example creates an Optional transformation entry converting Calling Number beginning with 0044xxxxxx to Calling Number +44xxxxxx
-	
-	new-uxtransformationentry -TransformationTableId 3 -InputFieldType 3 -InputFieldValue '00(44\d(.*))' -OutputFieldType 3 -OutputFieldValue '+\1' -Description "UKCLIToE164"
 	
 	.EXAMPLE
-	This example creates a Mandatory CLI (Calling Number)passthrough
-	
-	new-uxtransformationentry -TransformationTableId 9 -InputFieldType 3 -InputFieldValue '(.*)' -OutputFieldType 3 -OutputFieldValue '\1' -Description "PassthroughCLI" -MatchType 0
 	
 	.LINK
-	For Input/Output Field Value Code mappings, please refer to http://bit.ly/Iy7JQS
+	
 	
 	#>
-    [cmdletbinding()]
+    [cmdletbinding(SupportsShouldProcess = $True, ConfirmImpact = "High")]
     Param(
-        [Parameter(Mandatory = $true, Position = 0)]
+        #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
+        #Else it will look for the last created session using the command above
+        [Parameter(Mandatory = $false, Position = 0)]
+        [PSCustomObject]$uxSession,
+
+        [Parameter(Mandatory = $true, Position = 1)]
         [int]$SipServerTableId,
 
-        [Parameter(Mandatory = $false, Position = 1, HelpMessage = "Specifies the protocol to use for sending SIP messages")]
+        [Parameter(Mandatory = $false, Position = 2, HelpMessage = "Specifies the protocol to use for sending SIP messages")]
         [ValidateSet(0, 1)]
         [int]$ServerLookup = 0,
 		
-        [Parameter(Mandatory = $true, Position = 0, HelpMessage = "Specifies the priority of this server")]
+        [Parameter(Mandatory = $true, Position = 3, HelpMessage = "Specifies the priority of this server")]
         [ValidateRange(0, 16)]
         [int]$Priority,
 
-        [Parameter(Mandatory = $true, Position = 1, HelpMessage = "Specifies the IP address or FQDN where this Signaling Group sends SIP messages")]
+        [Alias("ComputerName", "Server", "FQDN")]
+        [Parameter(Mandatory = $true, Position = 4, HelpMessage = "Specifies the IP address or FQDN where this Signaling Group sends SIP messages")]
         [ValidateLength(1, 256)]
-        [string]$Host,
+        [string]$Hostname,
 
-        [Parameter(Mandatory = $false, Position = 4, HelpMessage = "Specifies IPv4 addresses or IPv6 addresses")]
+        [Parameter(Mandatory = $false, Position = 5, HelpMessage = "Specifies IPv4 addresses or IPv6 addresses")]
         [int]$HostIpVersion = 0,
 
-        [Parameter(Mandatory = $false, Position = 5, HelpMessage = "Specifies the port number to send SIP messages")]
+        [Parameter(Mandatory = $false, Position = 6, HelpMessage = "Specifies the port number to send SIP messages")]
         [ValidateRange(1024, 65535)]
         [string]$Port = 5061,
 
-        [Parameter(Mandatory = $false, Position = 6, HelpMessage = "Specifies the protocol to use for sending SIP messages")]
+        [Parameter(Mandatory = $false, Position = 7, HelpMessage = "Specifies the protocol to use for sending SIP messages")]
         [ValidateRange(0, 9)]
         [string]$Protocol = 2,
 		
-        [Parameter(Mandatory = $false, Position = 7, HelpMessage = "Specifies the TLS Profile ID")]
+        [Parameter(Mandatory = $false, Position = 8, HelpMessage = "Specifies the TLS Profile ID")]
         [ValidateRange(0, 9)]
         [string]$TLSProfileid,
 		
-        [Parameter(Mandatory = $false, Position = 8, HelpMessage = "Specifies the method to monitor server. None(0), SIP Options(1)")]
+        [Parameter(Mandatory = $false, Position = 9, HelpMessage = "Specifies the method to monitor server. None(0), SIP Options(1)")]
         [ValidateSet(0, 1)]
-        [int]$Monitor = 1
+        [int]$Monitor = 1,
+        
+        [Parameter(Mandatory = $False, Position = 10)]
+        [ValidateSet(0, 1)]
+        [int]$ReuseTimeout = 0,
+
+        [Parameter(Mandatory = $false, Position = 19)]
+        [ValidateSet(1, 4)]
+        [string]$TransportSocket = 4
 
         <#		[Parameter(Mandatory=$false,Position=9)]
 		[ValidateRange(0,2)]
@@ -1640,64 +1873,57 @@ Function global:new-uxsipserverentry {
 		[int]$ReuseTimeout
 #>		
     )
-	
-    #DEPENDENCY ON get-uxtransformationentry FUNCTION TO GET THE NEXT AVAILABLE TRANSFORMATIONTABLEID
-    Try {	
-        $sipserverentryid = ((get-uxsipservertableentry -sipservertableid $SipServerTableId | measure-object ID -maximum | Select -ExpandProperty Maximum) + 1)
-    }
-    Catch {
-        throw "Command failed when trying to execute the Transformationtableentryid using `"get-uxsipserverentry`" cmdlet.The error is $_"
-    }
-	
-    #URL for the new transformation table
-    $url = "https://$uxhostname/rest/sipservertable/$SipServerTableId/sipserver/$sipserverentryid"
-	
-    #Replace "+" with "%2B" as + is considered a Space in HTTP/S world, so gets processed as space when used in a command
-    #$InputFieldValue = $InputFieldValue.replace("+",'%2B')
-    #$OutputFieldValue = $OutputFieldValue.replace("+",'%2B')
-    #Variable which contains all the information we require to create a transformation table.
 
-    #Adding standard values for required parameters.	
+    # First thing we need to do is get a new TableId
+    try {
+        if ($uxSession) {
+            [int]$sipserverentryid = (get-uxsipservertableentry -uxSipServerTableId $SipServerTableId  -uxSession $uxSession | Select-Object -ExpandProperty id | ForEach-Object { $_.split(":")[1] } | measure -Maximum).Maximum + 1 
+        }
+        else {
+            [int]$sipserverentryid = (get-uxsipservertableentry -uxSipServerTableId $SipServerTableId | Select-Object -ExpandProperty id | ForEach-Object { $_.split(":")[1] } | measure -Maximum).Maximum + 1 
+        }
+    }
+    catch {
+        Throw "Unable to get a new entry id"
+    }
+    
+    # Setting Default Variables
     $ServerType = 0
     $DomainName = ""
     $Weight = 0
-    $args2 = "SipServerTableId=$SipServerTableId&ServerLookup=$ServerLookup&Priority=$Priority&Host=$Host&Port=$Port&Protocol=$Protocol&TLSProfileID=$TLSProfileid&Monitor=$Monitor&ServerType=$ServerType&DomainName=$DomainName&Weight=$Weight"
-	
-    Try {
-        $uxrawdata3 = Invoke-RestMethod -Uri $url -Method PUT -body $args2 -WebSession $sessionvar -ErrorAction Stop
+
+    $args2 = "ServerLookup=$ServerLookup"
+    $args2 += "&ServerType=$ServerType"
+    $args2 += "&Priority=$Priority"
+    $args2 += "&Host=$Hostname"
+    $args2 += "&Port=$Port"
+    $args2 += "&Protocol=$Protocol"
+    $args2 += "&DomainName=$DomainName"
+    $args2 += "&Weight=$Weight"
+    If ($TLSProfileid) { $args2 += "&TLSProfileID=$TLSProfileid" }
+    If ($Monitor) { $args2 += "&Monitor=$Monitor" }
+    $args2 += "&ReuseTimeout=$ReuseTimeout"
+    $args2 += "&TransportSocket=$TransportSocket"
+    
+    Write-Verbose "Submitting the following Arguments: $args2"
+
+    $ResourceSplat = @{
+        resource      = "sipservertable/$SipServerTableId/sipserver"
+        index         = $sipserverentryid
+        ReturnElement = "sipserver"
+        Arguments     = $args2
     }
-	
-    Catch {
-        throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_"
+    if ($uxSession) { $ResourceSplat.uxSession = $uxSession }
+    
+    Write-Verbose "Submitting Data"
+    Write-verbose "Returning the updated table"
+    $msg = "Adding A New Entry to sipservertable/$SipServerTableId/sipserver Table on the Gateway with ID $sipserverentryid"
+    if ($PSCmdlet.ShouldProcess($($msg))) {
+        $Return = new-uxresource @ResourceSplat -WhatIf:$PSBoundParameters.ContainsKey('WhatIf') -Confirm:$false      
     }
-    #If table is successfully created, 200OK is returned
-    If ( $uxrawdata3 | select-string "<http_code>200</http_code>") {
-	
-        Write-Verbose -Message $uxrawdata3
-    }
-    #If 500 message is returned
-    ElseIf ($uxrawdata3 | select-string "<http_code>500</http_code>") {
-        Write-Verbose -Message $uxrawdata3
-        throw "Unable to create sipserver entry. Ensure you have entered a unique sipserver table id"
-    }
-    #If no 200 or 500 message
-    Else {
-        #Unable to Login
-        throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_"
-    }
-	
-    #Sanitise data and return as object for verbose only
-    Try {
-        $m1 = $uxrawdata3.IndexOf("<sipserver id=")
-        $length1 = ($uxrawdata3.length - $m1 - 8)
-        [xml]$uxdataxml3 = $uxrawdata3.substring($m1, $length1)
-    }
-    Catch {
-        throw "Unable to convert received data into XML correctly. The error message is $_"
-    }
-    #Return sipserver entry object just created for verbose only
-    write-verbose $uxdataxml3.sipserver
-	
+    Write-Output $return
+
+
 }
 
 #Function to get sipprofile
@@ -1774,10 +2000,10 @@ Function Get-UxSipServerTableEntry {
     Param(
         #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
         #Else it will look for the last created session using the command above
-        [Parameter(Mandatory = $false, Position = 0)]
+        [Parameter(Mandatory = $false, Position = 1)]
         [PSCustomObject]$uxSession,
         #To find the ID of the sipserver table execute "get-uxsipservertable" cmdlet
-        [Parameter(Mandatory = $true, Position = 1)]
+        [Parameter(Mandatory = $true, Position = 0)]
         [ValidateRange(1, [int]::MaxValue)]
         [int]$uxSipServerTableId
 
@@ -1891,15 +2117,29 @@ Function New-UxSipProfile {
 Function Get-UxSignalGroup {
     <#
 	.SYNOPSIS      
-	 This cmdlet displays all the signalgroup names and ID's
-	
-	    .EXAMPLE
-	 get-UxSipProfile
+	    This cmdlet displays all the signalgroup names and ID's
+    
+    .DESCRIPTION
+        This cmdlet can be used to pull either the how signalling group or an individual entry by passing the signaling group id.
+
+	.EXAMPLE
+        get-UxSignalGroup
+
+        This pulls all the signaling groups from the last connected box.
+
+    .EXAMPLE
+        get-UxSignalGroup 2
+
+        This pulls the individual signal group.
 	   
     .EXAMPLE
-    $Creds = Get-credential
-	$Obj = connect-uxgateway -uxhostname lyncsbc01.COMPANY.co.uk -Credentials $Creds
-	get-UxSipProfile -uxSession $Obj
+        $Creds = Get-credential
+
+        PS C:\>$Obj = connect-uxgateway -uxhostname lyncsbc01.COMPANY.co.uk -Credentials $Creds
+        
+        PS C:\>get-UxSignalGroup -uxSession $Obj
+
+        This Example uses the uxSession object to pull entries just from that session rather than the last default session.
 
 	#>
     
@@ -2035,7 +2275,9 @@ Function Get-UxSignalGroup {
 #>
 }
 
-#Function to get signalgroupid
+
+<#
+#OLD Function to get signalgroupid
 Function global:get-uxsignalgroupid {
     <#
 	.SYNOPSIS      
@@ -2044,251 +2286,252 @@ Function global:get-uxsignalgroupid {
 	.EXAMPLE
 	 get-uxsignalgroupid
 	
-	#>
 
-    [cmdletbinding()]
-    Param(
-        [Parameter(Mandatory = $true, Position = 0, HelpMessage = 'To find the ID of the signalgroup "get-uxsignalgroup" cmdlet')]
-        [int]$signalgroupid
-    )
-    $args1 = ""
-    $url = "https://$uxhostname/rest/sipsg/$signalgroupid"
-	
-    Try {
-        $uxrawdata = Invoke-RestMethod -Uri $url -Method GET -WebSession $sessionvar -ErrorAction Stop
-    }
-	
-    Catch {
-        throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_"
-    }
-	
-    #Check if connection was successful.HTTP code 200 is returned
-    If ( $uxrawdata | select-string "<http_code>200</http_code>") {
-	
-        Write-Verbose $uxrawdata
-		
-        #Sanitise data and return as object
+
+        [cmdletbinding()]
+        Param(
+            [Parameter(Mandatory = $true, Position = 0, HelpMessage = 'To find the ID of the signalgroup "get-uxsignalgroup" cmdlet')]
+            [int]$signalgroupid
+        )
+        $args1 = ""
+        $url = "https://$uxhostname/rest/sipsg/$signalgroupid"
+            
         Try {
-            $m = $uxrawdata.IndexOf("<sipsg id=")
-            $length = ($uxrawdata.length - $m - 8)
-            [xml]$uxdataxml = $uxrawdata.substring($m, $length)
+            $uxrawdata = Invoke-RestMethod -Uri $url -Method GET -WebSession $sessionvar -ErrorAction Stop
         }
+            
         Catch {
-            throw "Unable to convert received data into XML correctly. The error message is $_"
+            throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_"
         }
-		
-    }
-    Else {
-        #Unable to Login
-        throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_"
-    }
-	
+            
+        #Check if connection was successful.HTTP code 200 is returned
+        If ( $uxrawdata | select-string "<http_code>200</http_code>") {
+            
+            Write-Verbose $uxrawdata
+                
+            #Sanitise data and return as object
+            Try {
+                $m = $uxrawdata.IndexOf("<sipsg id=")
+                $length = ($uxrawdata.length - $m - 8)
+                [xml]$uxdataxml = $uxrawdata.substring($m, $length)
+            }
+            Catch {
+                throw "Unable to convert received data into XML correctly. The error message is $_"
+            }
+                
+        }
+        Else {
+            #Unable to Login
+            throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_"
+        }
+            
 
-    #Create template object to hold the values of Tranformation tables
-    $objTemplate = New-Object psobject
-    $objTemplate | Add-Member -MemberType NoteProperty -Name Description -Value $null	
-    $objTemplate | Add-Member -MemberType NoteProperty -Name customAdminState -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name ProfileID -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name Channels -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name ServerSelection -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name ServerClusterId -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name RelOnQckConnect -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name RelOnQckConnectTimer -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name RTPMode -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name RTPProxyMode -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name RTPDirectMode -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name VideoProxyMode -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name VideoDirectMode -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name MediaConfigID -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name ToneTableID -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name ActionSetTableID -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name RouteTableID -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name RingBack -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name HuntMethod -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name Direction -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name PlayCongestionTone -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name Early183 -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name AllowRefreshSDP -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name OutboundProxy -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name ProxyIpVersion -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name NoChannelAvailableId -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name TimerSanitySetup -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name TimTimerCallProceeding -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name ChallengeRequest -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name NotifyCACProfile -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name NonceLifetime -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name Monitor -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name AuthorizationRealm -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name ProxyAuthorizationTableID -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name RegistrarID -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name RegistrarTTL -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name OutboundRegistrarTTL -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name DSCP -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name ListenPort_1 -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name Protocol_1 -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name TLSProfileID_1 -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name LocalIP_1 -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name ListenPort_2 -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name Protocol_2 -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name TLSProfileID_2 -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name LocalIP_2 -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name ListenPort_3 -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name Protocol_3 -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name TLSProfileID_3 -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name LocalIP_3 -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name ListenPort_4 -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name Protocol_4 -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name TLSProfileID_4 -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name LocalIP_4 -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name ListenPort_5 -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name Protocol_5 -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name TLSProfileID_5 -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name LocalIP_5 -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name ListenPort_6 -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name Protocol_6 -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name TLSProfileID_6 -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name LocalIP_6 -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name SIPtoQ850_TableID -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name Q850toSIP_TableID -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name NetInterfaceSignaling -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name NATTraversalType -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name NATPublicIPAddress -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name PassthruPeerSIPRespCode -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name SGLevelMOHService -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name IngressSPRMessageTableList -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name EgressSPRMessageTableList -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name QoEReporting -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name VoiceQualityReporting -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name RegisterKeepAlive -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name InteropMode -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name AgentType -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name RegistrantTTL -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name ADAttribute -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name ADUpdateFrequency -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name ADFirstUpdateTime -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name Office365FQDN -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name ICESupport -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name InboundNATTraversalDetection -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name InboundNATQualifiedPrefixesTableID -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name InboundSecureNATMediaLatching -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name InboundSecureNATMediaPrefix -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name InboundNATPeerRegistrarMaxEnabled -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name InboundNATPeerRegistrarMaxTTL -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name RemoteHosts -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name RemoteMasks -Value $null
-    $objTemplate | Add-Member -MemberType NoteProperty -Name SIPReSync -Value $null
+        #Create template object to hold the values of Tranformation tables
+        $objTemplate = New-Object psobject
+        $objTemplate | Add-Member -MemberType NoteProperty -Name Description -Value $null	
+        $objTemplate | Add-Member -MemberType NoteProperty -Name customAdminState -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name ProfileID -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name Channels -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name ServerSelection -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name ServerClusterId -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name RelOnQckConnect -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name RelOnQckConnectTimer -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name RTPMode -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name RTPProxyMode -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name RTPDirectMode -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name VideoProxyMode -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name VideoDirectMode -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name MediaConfigID -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name ToneTableID -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name ActionSetTableID -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name RouteTableID -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name RingBack -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name HuntMethod -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name Direction -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name PlayCongestionTone -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name Early183 -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name AllowRefreshSDP -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name OutboundProxy -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name ProxyIpVersion -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name NoChannelAvailableId -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name TimerSanitySetup -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name TimTimerCallProceeding -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name ChallengeRequest -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name NotifyCACProfile -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name NonceLifetime -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name Monitor -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name AuthorizationRealm -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name ProxyAuthorizationTableID -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name RegistrarID -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name RegistrarTTL -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name OutboundRegistrarTTL -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name DSCP -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name ListenPort_1 -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name Protocol_1 -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name TLSProfileID_1 -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name LocalIP_1 -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name ListenPort_2 -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name Protocol_2 -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name TLSProfileID_2 -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name LocalIP_2 -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name ListenPort_3 -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name Protocol_3 -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name TLSProfileID_3 -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name LocalIP_3 -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name ListenPort_4 -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name Protocol_4 -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name TLSProfileID_4 -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name LocalIP_4 -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name ListenPort_5 -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name Protocol_5 -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name TLSProfileID_5 -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name LocalIP_5 -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name ListenPort_6 -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name Protocol_6 -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name TLSProfileID_6 -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name LocalIP_6 -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name SIPtoQ850_TableID -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name Q850toSIP_TableID -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name NetInterfaceSignaling -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name NATTraversalType -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name NATPublicIPAddress -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name PassthruPeerSIPRespCode -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name SGLevelMOHService -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name IngressSPRMessageTableList -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name EgressSPRMessageTableList -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name QoEReporting -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name VoiceQualityReporting -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name RegisterKeepAlive -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name InteropMode -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name AgentType -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name RegistrantTTL -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name ADAttribute -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name ADUpdateFrequency -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name ADFirstUpdateTime -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name Office365FQDN -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name ICESupport -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name InboundNATTraversalDetection -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name InboundNATQualifiedPrefixesTableID -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name InboundSecureNATMediaLatching -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name InboundSecureNATMediaPrefix -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name InboundNATPeerRegistrarMaxEnabled -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name InboundNATPeerRegistrarMaxTTL -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name RemoteHosts -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name RemoteMasks -Value $null
+        $objTemplate | Add-Member -MemberType NoteProperty -Name SIPReSync -Value $null
 
-	
-    #Create an empty array which will contain the output
-    $objResult = @()
+            
+        #Create an empty array which will contain the output
+        $objResult = @()
 
-		
-    #Create template object and stuff all the sipprofile values into it
-    $objTemp = $objTemplate | Select-Object *
-    $objTemp.description = $uxdataxml.sipsg.description
-    $objTemp.customAdminState = $uxdataxml.sipsg.customAdminState
-    $objTemp.ProfileID = $uxdataxml.sipsg.profileid
-    $objTemp.Channels = $uxdataxml.sipsg.Channels
-    $objTemp.ServerSelection = $uxdataxml.sipsg.ServerSelection
-    $objTemp.ServerClusterId = $uxdataxml.sipsg.ServerClusterId
-    $objTemp.RelOnQckConnect = $uxdataxml.sipsg.RelOnQckConnect
-    $objTemp.RelOnQckConnectTimer = $uxdataxml.sipsg.RelOnQckConnectTimer
-    $objTemp.RTPMode = $uxdataxml.sipsg.RTPMode
-    $objTemp.RTPProxyMode = $uxdataxml.sipsg.RTPProxyMode
-    $objTemp.RTPDirectMode = $uxdataxml.sipsg.RTPDirectMode
-    $objTemp.VideoProxyMode = $uxdataxml.sipsg.VideoProxyMode
-    $objTemp.VideoDirectMode = $uxdataxml.sipsg.VideoDirectMode
-    $objTemp.MediaConfigID = $uxdataxml.sipsg.MediaConfigID
-    $objTemp.ToneTableID = $uxdataxml.sipsg.ToneTableID
-    $objTemp.ActionSetTableID = $uxdataxml.sipsg.ActionSetTableID
-    $objTemp.RouteTableID = $uxdataxml.sipsg.RouteTableID
-    $objTemp.RingBack = $uxdataxml.sipsg.RingBack
-    $objTemp.HuntMethod = $uxdataxml.sipsg.HuntMethod
-    $objTemp.Direction = $uxdataxml.sipsg.Direction
-    $objTemp.PlayCongestionTone = $uxdataxml.sipsg.PlayCongestionTone
-    $objTemp.Early183 = $uxdataxml.sipsg.Early183
-    $objTemp.AllowRefreshSDP = $uxdataxml.sipsg.AllowRefreshSDP
-    $objTemp.OutboundProxy = $uxdataxml.sipsg.OutboundProxy
-    $objTemp.ProxyIpVersion = $uxdataxml.sipsg.ProxyIpVersion
-    $objTemp.ProxyIpVersion = $uxdataxml.sipsg.ProxyIpVersion
-    $objTemp.NoChannelAvailableId = $uxdataxml.sipsg.NoChannelAvailableId
-    $objTemp.TimerSanitySetup = $uxdataxml.sipsg.TimerSanitySetup
-    $objTemp.TimTimerCallProceeding = $uxdataxml.sipsg.TimTimerCallProceeding
-    $objTemp.ChallengeRequest = $uxdataxml.sipsg.ChallengeRequest
-    $objTemp.NotifyCACProfile = $uxdataxml.sipsg.NotifyCACProfile
-    $objTemp.NonceLifetime = $uxdataxml.sipsg.NonceLifetime
-    $objTemp.Monitor = $uxdataxml.sipsg.Monitor
-    $objTemp.AuthorizationRealm = $uxdataxml.sipsg.AuthorizationRealm
-    $objTemp.ProxyAuthorizationTableID = $uxdataxml.sipsg.ProxyAuthorizationTableID
-    $objTemp.RegistrarID = $uxdataxml.sipsg.RegistrarID
-    $objTemp.RegistrarTTL = $uxdataxml.sipsg.RegistrarTTL
-    $objTemp.OutboundRegistrarTTL = $uxdataxml.sipsg.OutboundRegistrarTTL
-    $objTemp.DSCP = $uxdataxml.sipsg.DSCP
-    $objTemp.ListenPort_1 = $uxdataxml.sipsg.ListenPort_1
-    $objTemp.Protocol_1 = $uxdataxml.sipsg.Protocol_1
-    $objTemp.TLSProfileID_1 = $uxdataxml.sipsg.TLSProfileID_1
-    $objTemp.LocalIP_1 = $uxdataxml.sipsg.LocalIP_1
-    $objTemp.ListenPort_2 = $uxdataxml.sipsg.ListenPort_2
-    $objTemp.Protocol_2 = $uxdataxml.sipsg.Protocol_2
-    $objTemp.TLSProfileID_2 = $uxdataxml.sipsg.TLSProfileID_2
-    $objTemp.LocalIP_2 = $uxdataxml.sipsg.LocalIP_2
-    $objTemp.ListenPort_3 = $uxdataxml.sipsg.ListenPort_3
-    $objTemp.Protocol_3 = $uxdataxml.sipsg.Protocol_3
-    $objTemp.TLSProfileID_3 = $uxdataxml.sipsg.TLSProfileID_3
-    $objTemp.Protocol_3 = $uxdataxml.sipsg.Protocol_3
-    $objTemp.LocalIP_3 = $uxdataxml.sipsg.LocalIP_3
-    $objTemp.ListenPort_4 = $uxdataxml.sipsg.ListenPort_4
-    $objTemp.Protocol_4 = $uxdataxml.sipsg.Protocol_4
-    $objTemp.TLSProfileID_4 = $uxdataxml.sipsg.TLSProfileID_4
-    $objTemp.LocalIP_4 = $uxdataxml.sipsg.LocalIP_4
-    $objTemp.ListenPort_5 = $uxdataxml.sipsg.ListenPort_5
-    $objTemp.Protocol_5 = $uxdataxml.sipsg.Protocol_5
-    $objTemp.TLSProfileID_5 = $uxdataxml.sipsg.TLSProfileID_5
-    $objTemp.LocalIP_5 = $uxdataxml.sipsg.LocalIP_5
-    $objTemp.ListenPort_6 = $uxdataxml.sipsg.ListenPort_6
-    $objTemp.Protocol_6 = $uxdataxml.sipsg.Protocol_6
-    $objTemp.TLSProfileID_6 = $uxdataxml.sipsg.TLSProfileID_6
-    $objTemp.LocalIP_6 = $uxdataxml.sipsg.LocalIP_6
-    $objTemp.SIPtoQ850_TableID = $uxdataxml.sipsg.SIPtoQ850_TableID
-    $objTemp.Q850toSIP_TableID = $uxdataxml.sipsg.Q850toSIP_TableID
-    $objTemp.NetInterfaceSignaling = $uxdataxml.sipsg.NetInterfaceSignaling
-    $objTemp.NATTraversalType = $uxdataxml.sipsg.NATTraversalType
-    $objTemp.NATPublicIPAddress = $uxdataxml.sipsg.NATPublicIPAddress
-    $objTemp.PassthruPeerSIPRespCode = $uxdataxml.sipsg.PassthruPeerSIPRespCode
-    $objTemp.SGLevelMOHService = $uxdataxml.sipsg.SGLevelMOHService
-    $objTemp.IngressSPRMessageTableList = $uxdataxml.sipsg.IngressSPRMessageTableList
-    $objTemp.EgressSPRMessageTableList = $uxdataxml.sipsg.EgressSPRMessageTableList
-    $objTemp.QoEReporting = $uxdataxml.sipsg.QoEReporting
-    $objTemp.VoiceQualityReporting = $uxdataxml.sipsg.VoiceQualityReporting
-    $objTemp.RegisterKeepAlive = $uxdataxml.sipsg.RegisterKeepAlive
-    $objTemp.InteropMode = $uxdataxml.sipsg.InteropMode
-    $objTemp.AgentType = $uxdataxml.sipsg.AgentType
-    $objTemp.RegistrantTTL = $uxdataxml.sipsg.RegistrantTTL
-    $objTemp.ADAttribute = $uxdataxml.sipsg.ADAttribute
-    $objTemp.ADUpdateFrequency = $uxdataxml.sipsg.ADUpdateFrequency
-    $objTemp.ADFirstUpdateTime = $uxdataxml.sipsg.ADFirstUpdateTime
-    $objTemp.Office365FQDN = $uxdataxml.sipsg.Office365FQDN
-    $objTemp.ICESupport = $uxdataxml.sipsg.ICESupport
-    $objTemp.InboundNATTraversalDetection = $uxdataxml.sipsg.InboundNATTraversalDetection
-    $objTemp.InboundNATQualifiedPrefixesTableID = $uxdataxml.sipsg.InboundNATQualifiedPrefixesTableID
-    $objTemp.InboundSecureNATMediaLatching = $uxdataxml.sipsg.InboundSecureNATMediaLatching
-    $objTemp.InboundSecureNATMediaPrefix = $uxdataxml.sipsg.InboundSecureNATMediaPrefix
-    $objTemp.InboundNATPeerRegistrarMaxEnabled = $uxdataxml.sipsg.InboundNATPeerRegistrarMaxEnabled
-    $objTemp.InboundNATPeerRegistrarMaxTTL = $uxdataxml.sipsg.InboundNATPeerRegistrarMaxTTL
-    $objTemp.RemoteHosts = $uxdataxml.sipsg.RemoteHosts
-    $objTemp.RemoteMasks = $uxdataxml.sipsg.RemoteMasks
-    $objTemp.SIPReSync = $uxdataxml.sipsg.SIPReSync
+                
+        #Create template object and stuff all the sipprofile values into it
+        $objTemp = $objTemplate | Select-Object *
+        $objTemp.description = $uxdataxml.sipsg.description
+        $objTemp.customAdminState = $uxdataxml.sipsg.customAdminState
+        $objTemp.ProfileID = $uxdataxml.sipsg.profileid
+        $objTemp.Channels = $uxdataxml.sipsg.Channels
+        $objTemp.ServerSelection = $uxdataxml.sipsg.ServerSelection
+        $objTemp.ServerClusterId = $uxdataxml.sipsg.ServerClusterId
+        $objTemp.RelOnQckConnect = $uxdataxml.sipsg.RelOnQckConnect
+        $objTemp.RelOnQckConnectTimer = $uxdataxml.sipsg.RelOnQckConnectTimer
+        $objTemp.RTPMode = $uxdataxml.sipsg.RTPMode
+        $objTemp.RTPProxyMode = $uxdataxml.sipsg.RTPProxyMode
+        $objTemp.RTPDirectMode = $uxdataxml.sipsg.RTPDirectMode
+        $objTemp.VideoProxyMode = $uxdataxml.sipsg.VideoProxyMode
+        $objTemp.VideoDirectMode = $uxdataxml.sipsg.VideoDirectMode
+        $objTemp.MediaConfigID = $uxdataxml.sipsg.MediaConfigID
+        $objTemp.ToneTableID = $uxdataxml.sipsg.ToneTableID
+        $objTemp.ActionSetTableID = $uxdataxml.sipsg.ActionSetTableID
+        $objTemp.RouteTableID = $uxdataxml.sipsg.RouteTableID
+        $objTemp.RingBack = $uxdataxml.sipsg.RingBack
+        $objTemp.HuntMethod = $uxdataxml.sipsg.HuntMethod
+        $objTemp.Direction = $uxdataxml.sipsg.Direction
+        $objTemp.PlayCongestionTone = $uxdataxml.sipsg.PlayCongestionTone
+        $objTemp.Early183 = $uxdataxml.sipsg.Early183
+        $objTemp.AllowRefreshSDP = $uxdataxml.sipsg.AllowRefreshSDP
+        $objTemp.OutboundProxy = $uxdataxml.sipsg.OutboundProxy
+        $objTemp.ProxyIpVersion = $uxdataxml.sipsg.ProxyIpVersion
+        $objTemp.ProxyIpVersion = $uxdataxml.sipsg.ProxyIpVersion
+        $objTemp.NoChannelAvailableId = $uxdataxml.sipsg.NoChannelAvailableId
+        $objTemp.TimerSanitySetup = $uxdataxml.sipsg.TimerSanitySetup
+        $objTemp.TimTimerCallProceeding = $uxdataxml.sipsg.TimTimerCallProceeding
+        $objTemp.ChallengeRequest = $uxdataxml.sipsg.ChallengeRequest
+        $objTemp.NotifyCACProfile = $uxdataxml.sipsg.NotifyCACProfile
+        $objTemp.NonceLifetime = $uxdataxml.sipsg.NonceLifetime
+        $objTemp.Monitor = $uxdataxml.sipsg.Monitor
+        $objTemp.AuthorizationRealm = $uxdataxml.sipsg.AuthorizationRealm
+        $objTemp.ProxyAuthorizationTableID = $uxdataxml.sipsg.ProxyAuthorizationTableID
+        $objTemp.RegistrarID = $uxdataxml.sipsg.RegistrarID
+        $objTemp.RegistrarTTL = $uxdataxml.sipsg.RegistrarTTL
+        $objTemp.OutboundRegistrarTTL = $uxdataxml.sipsg.OutboundRegistrarTTL
+        $objTemp.DSCP = $uxdataxml.sipsg.DSCP
+        $objTemp.ListenPort_1 = $uxdataxml.sipsg.ListenPort_1
+        $objTemp.Protocol_1 = $uxdataxml.sipsg.Protocol_1
+        $objTemp.TLSProfileID_1 = $uxdataxml.sipsg.TLSProfileID_1
+        $objTemp.LocalIP_1 = $uxdataxml.sipsg.LocalIP_1
+        $objTemp.ListenPort_2 = $uxdataxml.sipsg.ListenPort_2
+        $objTemp.Protocol_2 = $uxdataxml.sipsg.Protocol_2
+        $objTemp.TLSProfileID_2 = $uxdataxml.sipsg.TLSProfileID_2
+        $objTemp.LocalIP_2 = $uxdataxml.sipsg.LocalIP_2
+        $objTemp.ListenPort_3 = $uxdataxml.sipsg.ListenPort_3
+        $objTemp.Protocol_3 = $uxdataxml.sipsg.Protocol_3
+        $objTemp.TLSProfileID_3 = $uxdataxml.sipsg.TLSProfileID_3
+        $objTemp.Protocol_3 = $uxdataxml.sipsg.Protocol_3
+        $objTemp.LocalIP_3 = $uxdataxml.sipsg.LocalIP_3
+        $objTemp.ListenPort_4 = $uxdataxml.sipsg.ListenPort_4
+        $objTemp.Protocol_4 = $uxdataxml.sipsg.Protocol_4
+        $objTemp.TLSProfileID_4 = $uxdataxml.sipsg.TLSProfileID_4
+        $objTemp.LocalIP_4 = $uxdataxml.sipsg.LocalIP_4
+        $objTemp.ListenPort_5 = $uxdataxml.sipsg.ListenPort_5
+        $objTemp.Protocol_5 = $uxdataxml.sipsg.Protocol_5
+        $objTemp.TLSProfileID_5 = $uxdataxml.sipsg.TLSProfileID_5
+        $objTemp.LocalIP_5 = $uxdataxml.sipsg.LocalIP_5
+        $objTemp.ListenPort_6 = $uxdataxml.sipsg.ListenPort_6
+        $objTemp.Protocol_6 = $uxdataxml.sipsg.Protocol_6
+        $objTemp.TLSProfileID_6 = $uxdataxml.sipsg.TLSProfileID_6
+        $objTemp.LocalIP_6 = $uxdataxml.sipsg.LocalIP_6
+        $objTemp.SIPtoQ850_TableID = $uxdataxml.sipsg.SIPtoQ850_TableID
+        $objTemp.Q850toSIP_TableID = $uxdataxml.sipsg.Q850toSIP_TableID
+        $objTemp.NetInterfaceSignaling = $uxdataxml.sipsg.NetInterfaceSignaling
+        $objTemp.NATTraversalType = $uxdataxml.sipsg.NATTraversalType
+        $objTemp.NATPublicIPAddress = $uxdataxml.sipsg.NATPublicIPAddress
+        $objTemp.PassthruPeerSIPRespCode = $uxdataxml.sipsg.PassthruPeerSIPRespCode
+        $objTemp.SGLevelMOHService = $uxdataxml.sipsg.SGLevelMOHService
+        $objTemp.IngressSPRMessageTableList = $uxdataxml.sipsg.IngressSPRMessageTableList
+        $objTemp.EgressSPRMessageTableList = $uxdataxml.sipsg.EgressSPRMessageTableList
+        $objTemp.QoEReporting = $uxdataxml.sipsg.QoEReporting
+        $objTemp.VoiceQualityReporting = $uxdataxml.sipsg.VoiceQualityReporting
+        $objTemp.RegisterKeepAlive = $uxdataxml.sipsg.RegisterKeepAlive
+        $objTemp.InteropMode = $uxdataxml.sipsg.InteropMode
+        $objTemp.AgentType = $uxdataxml.sipsg.AgentType
+        $objTemp.RegistrantTTL = $uxdataxml.sipsg.RegistrantTTL
+        $objTemp.ADAttribute = $uxdataxml.sipsg.ADAttribute
+        $objTemp.ADUpdateFrequency = $uxdataxml.sipsg.ADUpdateFrequency
+        $objTemp.ADFirstUpdateTime = $uxdataxml.sipsg.ADFirstUpdateTime
+        $objTemp.Office365FQDN = $uxdataxml.sipsg.Office365FQDN
+        $objTemp.ICESupport = $uxdataxml.sipsg.ICESupport
+        $objTemp.InboundNATTraversalDetection = $uxdataxml.sipsg.InboundNATTraversalDetection
+        $objTemp.InboundNATQualifiedPrefixesTableID = $uxdataxml.sipsg.InboundNATQualifiedPrefixesTableID
+        $objTemp.InboundSecureNATMediaLatching = $uxdataxml.sipsg.InboundSecureNATMediaLatching
+        $objTemp.InboundSecureNATMediaPrefix = $uxdataxml.sipsg.InboundSecureNATMediaPrefix
+        $objTemp.InboundNATPeerRegistrarMaxEnabled = $uxdataxml.sipsg.InboundNATPeerRegistrarMaxEnabled
+        $objTemp.InboundNATPeerRegistrarMaxTTL = $uxdataxml.sipsg.InboundNATPeerRegistrarMaxTTL
+        $objTemp.RemoteHosts = $uxdataxml.sipsg.RemoteHosts
+        $objTemp.RemoteMasks = $uxdataxml.sipsg.RemoteMasks
+        $objTemp.SIPReSync = $uxdataxml.sipsg.SIPReSync
 
 
-    $objResult = $objTemp
-		
-    #This object contains all the signalgroup table objects. Do a foreach to grab friendly names of the sipprofile tables
-    $objResult
+        $objResult = $objTemp
+                
+        #This object contains all the signalgroup table objects. Do a foreach to grab friendly names of the sipprofile tables
+        $objResult
 
 }
+#>
 
 #Function to create new signalgroup
-Function global:new-uxsignalgroup {
+Function New-UxSignalGroup {
     <#
 	.SYNOPSIS      
 	 This cmdlet creates a new signalgroup
@@ -2313,7 +2556,7 @@ Function global:new-uxsignalgroup {
         [ValidateSet(0, 1)]
         [int]$CustomAdminState = 1 ,
 
-        [Parameter(Mandatory = $true, Position = 1, HelpMessage = 'Specifies the SIP Profile to be used by this Signaling Group')]
+        [Parameter(Mandatory = $true, Position = 1, HelpMessage = 'Specifies the SIP Profile to#> be used by this Signaling Group')]
         [ValidateRange(1, 65534)]
         [int]$ProfileID ,
         
@@ -2359,7 +2602,108 @@ Function global:new-uxsignalgroup {
 	
 
     )
-        
+
+
+    # First thing we need to do is get a new TableId
+    try {
+        if ($uxSession) {
+            [int]$newSipSigid = (get-uxsignalgroup -uxSession $uxSession | Select-Object -ExpandProperty id | measure -Maximum).Maximum + 1 
+        }
+        else {
+            [int]$newSipSigid = (get-uxsignalgroup | Select-Object -ExpandProperty id | measure -Maximum).Maximum + 1 
+        }
+    }
+    catch {
+        Throw "Unable to get a new Signaling Group ID"
+    }
+
+
+    #Setting required variables
+    $RelOnQckConnect = 0
+    $RTPMode = 1
+    $RTPProxyMode = 1
+    $RTPDirectMode = 1
+    $VideoProxyMode = 0
+    $VideoDirectMode = 0
+    $HuntMethod = 4
+    $ProxyIpVersion = 0
+    $DSCP = 40
+    $NATTraversalType = 0
+    $ICESupport = 0
+    $ICEMode = 0
+    $InboundNATTraversalDetection = 0
+
+    #Default for non required parameters
+    $ServerSelection = 0
+    $RelOnQckConnectTimer = 1000
+    $ToneTableID = 0
+    $ActionSetTableID = 0
+    $RingBack = 0
+    $Direction = 2
+    $PlayCongestionTone = 0
+    $Early183 = 0
+    $AllowRefreshSDP = 1
+    $OutboundProxy = ""
+    $OutboundProxyPort = 5060
+    $NoChannelAvailableId = 34
+    $TimerSanitySetup = 180000
+    $TimerCallProceeding = 180000
+    $ChallengeRequest = 0
+    $NotifyCACProfile = 0
+    $NonceLifetime = 600
+    $Monitor = 2
+    $AuthorizationRealm = ""
+
+
+
+    #Signalling ID Parameters
+
+    $args1 = "Description=$Description"
+    If ($customadminstate) { $args1 += "&customadminstate=$customadminstate" }
+    If ($ProfileID) { $args1 += "&profileid=$ProfileID" }
+    If ($channels) { $args1 += "&channels=$channels" }
+    If ($mediaconfigid) { $args1 += "&mediaconfigid=$mediaconfigid" }
+    If ($routetableid) { $args1 += "&routetableid=$routetableid" }
+    If ($ListenPort_1) { $args1 += "&ListenPort_1=$ListenPort_1" }
+    If ($Protocol_1) { $args1 += "&Protocol_1=$Protocol_1" }
+    If ($TLSProfileID_1) { $args1 += "&TLSProfileID_1=$TLSProfileID_1" }
+    If ($netinterfacesignaling) { $args1 += "&netinterfacesignaling=$netinterfacesignaling" }
+    If ($remotehosts) { $args1 += "&remotehosts=$remotehosts" }
+    If ($remotemasks) { $args1 += "&remotemasks=$remotemasks" }
+    If ($relonqckconnect) { $args1 += "&relonqckconnect=$relonqckconnect" }
+    If ($rtpmode) { $args1 += "&rtpmode=$rtpmode" }
+    If ($rtpproxymode) { $args1 += "&rtpproxymode=$rtpproxymode" }
+    If ($rtpdirectmode) { $args1 += "&rtpdirectmode=$rtpdirectmode" }
+    If ($videoproxymode) { $args1 += "&videoproxymode=$videoproxymode" }
+    If ($videodirectmode) { $args1 += "&videodirectmode=$videodirectmode" }
+    If ($huntmethod) { $args1 += "&huntmethod=$huntmethod" }
+    If ($proxyipversion) { $args1 += "&proxyipversion=$proxyipversion" }
+    If ($dscp) { $args1 += "&dscp=$dscp" }
+    If ($nattraversaltype) { $args1 += "&nattraversaltype=$nattraversaltype" }
+    If ($icesupport) { $args1 += "&icesupport=$icesupport" }
+    If ($inboundnattraversaldetection) { $args1 += "&inboundnattraversaldetection=$inboundnattraversaldetection" }
+    If ($icemode) { $args1 += "&icemode=$icemode" }
+
+     
+
+    # Okay Lets Build the Spalt
+    $ResourceSplat = @{
+        resource      = "sipsg"
+        index         = $newSipSigid
+        ReturnElement = "sipsg"
+        Arguments     = $args1
+    }
+    if ($uxSession) { $ResourceSplat.uxSession = $uxSession }
+
+    Write-Verbose "Submitting Data"
+    Write-verbose "Returning the updated table"
+    $msg = "Adding A New Entry to SipSignaling Table on the Gateway with ID $newSipSigid"
+    if ($PSCmdlet.ShouldProcess($($msg))) {
+        $Return = new-uxresource @ResourceSplat -WhatIf:$PSBoundParameters.ContainsKey('WhatIf') -Confirm:$false      
+    }
+    Write-Output $return
+
+    <#        
 
 	
     #DEPENDENCY ON get-uxsipservertable FUNCTION TO GET THE NEXT AVAILABLE signalgroup ID
@@ -2409,7 +2753,7 @@ Function global:new-uxsignalgroup {
 
 
 
-    #URL for the new ssignal group
+    #URL for the new signal group
     $args = "description=$description&customadminstate=$customadminstate&profileid=$ProfileID&ServerClusterId=$ServerClusterId&channels=$channels&mediaconfigid=$mediaconfigid&routetableid=$routetableid&ListenPort_1=$ListenPort_1&Protocol_1=$Protocol_1&TLSProfileID_1=$TLSProfileID_1&netinterfacesignaling=$netinterfacesignaling&remotehosts=$remotehosts&remotemasks=$remotemasks&relonqckconnect=$relonqckconnect&rtpmode=$rtpmode&rtpproxymode=$rtpproxymode&rtpdirectmode=$rtpdirectmode&videoproxymode=$videoproxymode&videodirectmode=$videodirectmode&huntmethod=$huntmethod&proxyipversion=$proxyipversion&dscp=$dscp&nattraversaltype=$nattraversaltype&icesupport=$icesupport&inboundnattraversaldetection=$inboundnattraversaldetection&icemode=$icemode"
     $url = "https://$uxhostname/rest/sipsg/$sipsgid"
 	
@@ -2447,10 +2791,12 @@ Function global:new-uxsignalgroup {
     }
     #Return sipserver table object just created
     write-verbose $uxdataxml.sipsg
+
+#>
 }
 
 #Function to restartUX
-Function global:restart-uxgateway {
+Function Restart-UxGateway {
     <#
 	.SYNOPSIS      
 	 This cmdlet restarts Ribbon gateway
@@ -2464,37 +2810,26 @@ Function global:restart-uxgateway {
 	#>
 
     [cmdletbinding()]
-    Param()
-    $args1 = ""
-    $url = "https://$uxhostname/rest/system?action=reboot"
-	
-    Try {
-        $uxrawdata = Invoke-RestMethod -Uri $url -Method POST -Body $args1 -WebSession $sessionvar -ErrorAction Stop
+    Param(
+        #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
+        #Else it will look for the last created session using the command above
+        [Parameter(Mandatory = $false, Position = 0)]
+        [PSCustomObject]$uxSession
+    )
+    if ($uxSession) {
+        $uxSessionObj = $uxSession
+        $uxHost = $uxSession.host
+        $SessionVar = $uxSession.Session
     }
-	
-    Catch {
-        throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_"
+    else {
+        $uxSessionObj = $DefaultSession
+        $uxHost = $DefaultSession.host
+        $SessionVar = $DefaultSession.session
     }
-	
-    #Check if reboot command was accepted.HTTP code 200 is returned
-    If ( $uxrawdata | select-string "<http_code>200</http_code>") {
-	
-        Write-Verbose $uxrawdata
-		
-        #Sanitise data and return as object
-        Try {
-            $m = $uxrawdata.IndexOf("<sipprofiletable_list")
-            $length = ($uxrawdata.length - $m - 8)
-            [xml]$uxdataxml = $uxrawdata.substring($m, $length)
-        }
-        Catch {
-            throw "Unable to convert received data into XML correctly. The error message is $_"
-        }
-		
-    }
-    Else {
-        #Unable to Login
-        throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_"
+
+    $Status = Send-UxCommand -uxSession $uxSessionObj -Command reboot -ReturnElement status
+    If ($status.http_code -eq "200") {
+        Write-Host "Reboot initiated and completed succesfully" 
     }
 }
 
