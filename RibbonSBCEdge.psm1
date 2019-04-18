@@ -900,7 +900,7 @@ Function Set-UxResource {
     #endregion
 	
     #The URL  which will be passed to the UX
-    $url = "https://$uxhostname/rest/$resource/$index"
+    $url = "https://$uxHost/rest/$resource/$index"
     Write-verbose "Editing $url"
     Write-verbose "With: $Arguments "
     
@@ -1148,10 +1148,10 @@ Function New-UxTransformationTable {
     # First thing we need to do is get a new TableId
     try {
         if ($uxSession) {
-            [int]$NewTransformationTableId = (get-uxtransformationtable -uxSession $uxSession | measure -Maximum).Maximum + 1 
+            [int]$NewTransformationTableId = (get-uxtransformationtable -uxSession $uxSession | select -ExpandProperty id | measure -Maximum).Maximum + 1 
         }
         else {
-            [int]$NewTransformationTableId = (get-uxtransformationtable | measure -Maximum).Maximum + 1 
+            [int]$NewTransformationTableId = (get-uxtransformationtable | select -ExpandProperty id | measure -Maximum).Maximum + 1 
         }
     }
     catch {
@@ -2018,9 +2018,9 @@ Function Get-UxSignalGroup {
     Write-verbose "Called $($MyInvocation.MyCommand)"
     #$resource = Get-UxResourceName -functionname $MyInvocation.MyCommand
     
-    if ($sipprofileid) {
+    if ($signalgroupid) {
         $ResourceSplat = @{
-            resource = "sipsg/$sipprofileid"
+            resource = "sipsg/$signalgroupid"
             #ReturnElement = "sipsg"
             detail   = $true
         }    
