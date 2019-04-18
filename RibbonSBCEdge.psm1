@@ -125,16 +125,22 @@ Function Connect-UxGateway {
     Write-verbose $uxcommand1output.trim()
 
     $script:DefaultSession = [PSCustomObject]@{
-        host        = $uxhostname
-        session     =	$Session
-        credentials = $Credentials
+        host               = $uxhostname
+        session            = $Session
+        credentials        = $Credentials
+        DefaultSessionType = $true
     }
+    $DefaultSession.PSObject.TypeNames.Insert(0, "UX.SBCSessionObject")
+    
+    $ReturnObject = [PSCustomObject]@{
+        host               = $uxhostname
+        session            = $Session
+        credentials        = $Credentials
+        DefaultSessionType = $false            # Setting this will tell future scripts if the session has been passed to them OR if it is the default session
+    }
+    $ReturnObject.PSObject.TypeNames.Insert(0, "UX.SBCSessionObject")
 
-    return [PSCustomObject]@{
-        host        =	$uxhostname
-        session     =	$Session
-        credentials = $Credentials
-    }
+    Return $ReturnObject
     
 }
 
@@ -420,11 +426,39 @@ Function Get-UxResource {
     }
 	
     Catch {
-        throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity)."
+        Try {
+            if ($uxSession.DefaultSessionType) {
+                Write-Warning "Session Expired - Trying to renew session to $($uxSession.host)"
+                Connect-UxGateway -uxhostname $DefaultSession.host -Credentials $DefaultSession.Credentials
+            }
+        }
+        catch {
+            throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity)."
+        }    
     }
 
     $Result = ([xml]$uxrawdata.trim()).root
     $Success = $Result.status.http_code
+
+    #Check if connection was successful.HTTP code 401 is returned which means the session has expired
+    If ( $Success -eq "401") {
+        # Lets Try again if it is the default session
+        Try {
+            if ($uxSession.DefaultSessionType) {
+                Write-Warning "Session Expired - Trying to renew session to $($uxSession.host)"
+                Connect-UxGateway -uxhostname $DefaultSession.host -Credentials $DefaultSession.Credentials
+                $uxrawdata = Invoke-RestMethod -Uri $url -Method GET -WebSession $($DefaultSession.Session) -ErrorAction Stop
+            }
+            
+
+        }
+        catch {
+            #Unable to Login again
+            throw "We tried to reauthenticate and run your command again but failed, Try to rerun your command, OR use Connect-UxGateWay cmdlet again"
+        }
+        $Result = ([xml]$uxrawdata.trim()).root
+        $Success = $Result.status.http_code    
+    }
 		
     #Check if connection was successful.HTTP code 200 is returned
     If ( $Success -ne "200") {
@@ -518,7 +552,7 @@ Function New-UxResource {
     Write-verbose "Adding: $Arguments "
     
     # Lets check the User Actually wants to make this change
-    $msg = "Adding A New Entry to $resource on the $$($uxSession.host) Gateway with ID $Index"
+    $msg = "Adding A New Entry to $resource on the $($uxSession.host) Gateway with ID $Index"
     if ($PSCmdlet.ShouldProcess($($msg))) {
         Try {
             $uxrawdata = Invoke-RestMethod -Uri $url -Method PUT -Body $Arguments -WebSession $($uxSession.Session) -ErrorAction Stop
@@ -937,6 +971,199 @@ Function Get-UxTransformationTable {
     
 }
 
+Function Copy-UxTransformationTables {
+    <#
+	.SYNOPSIS      
+	 This Cmdlet will take a list of transformation tables from one SBC and Copy them to another
+	 
+	.DESCRIPTION
+     Copying data from one SBC to another is tedious work, this cmdlet will take a list of transformation tables and will build them
+     on the destination SBC. To ensure we prevent unitntended results the rules will be disabled unless the -enabled switch is used.
+
+     The cmdlet will enumerate through the entries unless you use the -confirm:$false parameter
+
+	.EXAMPLE
+	Copy-UxTransformationTables -SourceSession $SourceGateWay -DestinationSession $DestinationGateway
+    
+    
+    #>
+    [cmdletbinding(SupportsShouldProcess = $True, ConfirmImpact = "High")]
+    Param(
+        #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
+        #Else it will look for the last created session using the command above
+        [Parameter(Mandatory = $true, Position = 0)]
+        [PSCustomObject]$SourceSession,
+        #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
+        #Else it will look for the last created session using the command above
+        [Parameter(Mandatory = $true, Position = 1)]
+        [PSCustomObject]$DestinationSession,
+        #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
+        #Else it will look for the last created session using the command above
+        [Parameter(Mandatory = $false, Position = 3)]
+        [switch]$Enabled
+    )
+
+    Write-Verbose "Source SBC $($SourceSession.host)"
+    Write-Verbose "Destination SBC $($DestinationSession.host)"
+    Write-verbose "Checking Both Sessions"
+    try {
+        $null = Get-UxSystemInfo -uxSession $SourceSession -Verbose:$false
+    }
+    catch {
+        Throw "$($SourceSession.host) Session has problems, please ensure both sessions have been accessed in the last 10 mins."
+    }
+    try {
+        $null = Get-UxSystemInfo -uxSession $DestinationSession -Verbose:$false
+    }
+    catch {
+        Throw "$($DestinationSession.host) Session has problems, please ensure both sessions have been accessed in the last 10 mins."
+    }
+    Write-verbose "Both Sessions Appear to be ok, continuing"
+    
+    $SourceTransformationTable = Get-UxTransformationTable -uxSession $1stGateway -Verbose:$false
+    foreach ($Entry in $SourceTransformationTable) {
+        $EntryObject = ($Entry | New-UxURLandPSObject).posh
+        $EntryObject.Description += " - Copy from $($SourceSession.host)"
+        
+        # Lets get the Transformation Rules
+        $TransformationRules = Get-UxTransformationTable $EntryObject.id -Verbose:$false
+        
+        
+        
+        
+        
+        
+        Write-verbose "Removing Uncopyable attributes"
+        $EntryObject.psobject.properties.remove('href')
+        $EntryObject.psobject.properties.remove('id')
+        $EntryObject.psobject.properties.remove('sequence')
+        Write-verbose "Copying Item:"
+        Write-Verbose $EntryObject
+        $HTMLFormated = ($EntryObject | New-UxURLandPSObject).HtmlStr
+        Write-Verbose $HTMLFormated
+
+
+
+
+        # Lets Get the next id on the Destination box
+        [int]$NewTransformationTableId = (get-uxtransformationtable -uxSession $DestinationSession -verbos:$false | select-object -ExpandProperty id | Measure-Object -Maximum).Maximum + 1 
+
+        # Lets Get Ready to add
+        $ResourceSplat = @{
+            resource      = "transformationtable"
+            index         = $NewTransformationTableId
+            ReturnElement = "transformationtable"
+            Arguments     = $HTMLFormated
+            uxSession     = $DestinationSession
+            Verbose       = $false
+        }
+        
+        
+
+        Write-Verbose "Submitting Data"
+        
+        if (-not $all) {
+            Write-host = "Adding A New Entry to Transformation Table on the $($DestinationSession.host) Gateway with ID $NewTransformationTableId"
+        }
+        $msg = "Adding A New Entry to Transformation Table on the $($DestinationSession.host) Gateway with ID $NewTransformationTableId"
+        if ($PSCmdlet.ShouldProcess($($msg))) {
+            Write-verbose "Returning the updated table"
+            $NewTableResult = new-uxresource @ResourceSplat -WhatIf:$PSBoundParameters.ContainsKey('WhatIf')
+            Write-Verbose "Returned Table id $($NewTableResult.id)"
+
+            # Time to add the entries
+            $TransformationRules | ForEach-Object { 
+                # Again we do this as it is easier to manipulate a PSobject rather than an XmlElement
+                $PoshObject = ($_ | New-UxURLandPSObject).posh
+            
+            
+                # As back up to ordering, and to help SBC engineers we add (# Number to the description)
+                $PoshObject.description = "(#{0}-En{1}) {2}" -f $PoshObject.ListOrder, $PoshObject.ConfigIEState, $PoshObject.description
+
+                # Now we see if the enabled switch has been applied, if not we then tell the rule to be disabled.
+                if (-not $Enabled) {
+                    $PoshObject.ConfigIEState = 0
+                }
+                
+                
+
+                #Now we remove stuff that cannot apply on a different box
+                $PoshObject.psobject.properties.remove('href')
+                $PoshObject.psobject.properties.remove('id')
+                $PoshObject.psobject.properties.remove('ListOrder')
+
+                $HTMLFormated = ($PoshObject | New-UxURLandPSObject).HtmlStr
+            
+                # Lets Get the next Entr ID
+                [int]$NewTransformationEntryId = (get-uxtransformationentry -uxTransformationTableId $NewTableResult.id -uxSession $DestinationSession | Select-Object -ExpandProperty id | ForEach-Object { $_.split(":")[1] } | Measure-Object -Maximum).Maximum + 1 
+
+                Write-Verbose "Gonna Add this"
+                Write-Verbose $HTMLFormated
+                Write-Verbose "To the New SBC in table $($NewTableResult.id)"
+
+                $EntrySplat = @{
+                    resource      = "transformationtable/$($NewTableResult.id)/transformationentry"
+                    index         = $NewTransformationEntryId
+                    ReturnElement = "transformationtable"
+                    uxSession     = $DestinationSession
+                    Arguments     = $HTMLFormated
+                   
+                }
+                try {
+                    $EntryReturn = new-uxresource @EntrySplat -WhatIf:$PSBoundParameters.ContainsKey('WhatIf') 
+                }
+                catch {
+                    Write-Error "Failed to Add : $HTMLFormated"  
+                } 
+                #Write-verbose $EntryReturn
+            }
+
+        }
+    }
+
+}
+
+
+Function Copy-UxTransformationEntry {
+    <#
+	.SYNOPSIS      
+	 This Cmdlet will take a list of transformation entry from one SBC and Copy them to another
+	 
+	.DESCRIPTION
+     Copying data from one SBC to another is tedious work, this cmdlet will take a list of transformation tables and will build them
+     on the destination SBC. To ensure we prevent unitntended results the rules will be disabled unless the -enabled switch is used.
+
+     The cmdlet will enumerate through the entries unless you use the -ALL parameter
+
+	.EXAMPLE
+	Copy-UxTransformationTables -SourceSession $SourceGateWay -DestinationSession $DestinationGateway
+    
+    
+    #>
+    [cmdletbinding(SupportsShouldProcess = $True, ConfirmImpact = "High")]
+    Param(
+        #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
+        #Else it will look for the last created session using the command above
+        [Parameter(Mandatory = $true, Position = 0)]
+        [PSCustomObject]$SourceSession,
+        #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
+        #Else it will look for the last created session using the command above
+        [Parameter(Mandatory = $true, Position = 1)]
+        [PSCustomObject]$DestinationSession,
+        #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
+        #Else it will look for the last created session using the command above
+        [Parameter(Mandatory = $false, Position = 2)]
+        [switch]$ALL,
+        #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
+        #Else it will look for the last created session using the command above
+        [Parameter(Mandatory = $false, Position = 3)]
+        [switch]$Enabled
+    )
+}
+
+
+
+
 Function Get-UxOrderedList {
     <#
 	.SYNOPSIS      
@@ -1046,10 +1273,10 @@ Function New-UxTransformationTable {
     Param(
         #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
         #Else it will look for the last created session using the command above
-        [Parameter(Mandatory = $false, Position = 0)]
+        [Parameter(Mandatory = $false, Position = 1)]
         [PSCustomObject]$uxSession,
         #Description of the new tablle
-        [Parameter(Mandatory = $true, Position = 1)]
+        [Parameter(Mandatory = $true, Position = 0)]
         [ValidateLength(1, 64)]
         [string]$Description
     )
@@ -1085,7 +1312,7 @@ Function New-UxTransformationTable {
     if ($PSCmdlet.ShouldProcess($($msg))) {
         $Return = new-uxresource @ResourceSplat -WhatIf:$PSBoundParameters.ContainsKey('WhatIf') -Confirm:$false      
     }
-    Write-Output $return.transformationtable
+    Write-Output $return
 
 }
 
@@ -1579,6 +1806,68 @@ Function New-UxSipServerEntry {
 
 }
 
+Function New-UxCallRoutingTable {
+    <#
+	.SYNOPSIS      
+	 This cmdlet creates a new Call Routing Table (not routing table entry)
+	 
+	.DESCRIPTION
+	This cmdlet creates a new Call Routing Table (not routing table entry)
+	
+	.PARAMETER Description
+	Enter here the Description (Name) of the Call Routing table.This is what will be displayed in the Ribbon GUI
+	
+	.EXAMPLE
+	 new-UxCallRoutingTable -Description "LyncToPBX"
+	
+        #>
+    [cmdletbinding(SupportsShouldProcess = $True, ConfirmImpact = "High")]
+    Param(
+        #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
+        #Else it will look for the last created session using the command above
+        [Parameter(Mandatory = $false, Position = 1)]
+        [PSCustomObject]$uxSession,
+        #Description of the new tablle
+        [Parameter(Mandatory = $true, Position = 0)]
+        [ValidateLength(1, 64)]
+        [string]$Description
+    )
+        
+
+    # First thing we need to do is get a new TableId
+    try {
+        if ($uxSession) {
+            [int]$NewCallRoutingTableId = (get-UxCallRoutingTable -uxSession $uxSession | select-object -ExpandProperty id | Measure-Object -Maximum).Maximum + 1 
+        }
+        else {
+            [int]$NewCallRoutingTableId = (get-UxCallRoutingTable | select-object -ExpandProperty id | Measure-Object -Maximum).Maximum + 1 
+        }
+    }
+    catch {
+        Throw "Unable to get a new table id"
+    }
+
+    #Lets create the information to upload, this nees to be in HTTP format for the PUT
+    $HTTPDescription = "Description=$Description"
+
+    $ResourceSplat = @{
+        resource      = "routingtable"
+        index         = $NewCallRoutingTableId
+        ReturnElement = "routingtable_list"
+        Arguments     = $HTTPDescription
+    }
+    if ($uxSession) { $ResourceSplat.uxSession = $uxSession }
+
+    Write-Verbose "Submitting Data"
+    Write-verbose "Returning the updated table"
+    $msg = "Adding A New Entry to Transformation Table on the Gateway with ID $NewCallRoutingTableId"
+    if ($PSCmdlet.ShouldProcess($($msg))) {
+        $Return = new-uxresource @ResourceSplat -WhatIf:$PSBoundParameters.ContainsKey('WhatIf') -Confirm:$false      
+    }
+    Write-Output $return.routingtable_list
+
+}
+
 Function Get-UxCallRoutingTable {
     <#
 	.SYNOPSIS      
@@ -1950,6 +2239,30 @@ Function Get-UxSignalGroup {
 
 
 }
+
+Function New-UxURLandPSObject {
+    [cmdletbinding()]
+    Param(
+        [Parameter(Mandatory = $false, Position = 0, ValueFromPipeline)]
+        $Object
+    )
+    $NewPSObject = [PSCustomObject]@{
+        PSTypeName = 'SBC.Object'
+    }
+    ForEach ($Prop in $($Object | Get-Member -MemberType Properties | Select-object -exp name) ) {
+        $Str += "{0}={1}&" -f $prop, $Object.$Prop
+        $NewPSObject | Add-Member -MemberType NoteProperty -Name $Prop -Value $Object.$Prop
+        
+    }
+    # Lets remove the last '&' character
+    $NewPSObject = [PSCustomObject]@{
+        Posh    = $NewPSObject
+        HtmlStr = $($str.Substring(0, $Str.Length - 1)).replace("+", '%2B')
+    } 
+    Return $NewPSObject
+
+}
+
 
 #Function to create new signalgroup
 Function New-UxSignalGroup {
