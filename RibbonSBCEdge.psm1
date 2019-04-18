@@ -365,7 +365,7 @@ Function Get-UxResource {
     [cmdletbinding()]
     Param(
         [Parameter(Mandatory = $false, Position = 0)]
-        [PSCustomObject]$uxSession,
+        [PSCustomObject]$uxSession = $DefaultSession,
         [Parameter(Mandatory = $true, Position = 1)]
         [string]$resource,
         [Parameter(Mandatory = $false, Position = 2)]
@@ -408,7 +408,7 @@ Function Get-UxResource {
 
 
     $args1 = $Arguments
-    $url = "https://$uxHost/rest/$resource"
+    $url = "https://$($uxSession.host)/rest/$resource"
     if ($Details) {
         $url += "?details=true" 
     }
@@ -416,7 +416,7 @@ Function Get-UxResource {
     Write-verbose "Connecting to $url"
 	
     Try {
-        $uxrawdata = Invoke-RestMethod -Uri $url -Method GET -WebSession $SessionVar -ErrorAction Stop
+        $uxrawdata = Invoke-RestMethod -Uri $url -Method GET -WebSession $($uxSession.Session) -ErrorAction Stop
     }
 	
     Catch {
@@ -475,7 +475,7 @@ Function New-UxResource {
     Param(
         # The Session Object used if wanting to connect to multiple servers
         [Parameter(Mandatory = $false, Position = 0)]
-        [PSCustomObject]$uxSession,
+        [PSCustomObject]$uxSession = $DefaultSession,
 
         # The Resource you wish to hit, such as sipservertable
         [Parameter(Mandatory = $true, Position = 1)]
@@ -500,23 +500,7 @@ Function New-UxResource {
 
     )
     
-    #Region Getting Session
-    if ($uxSession) {
-        $uxSessionObj = $uxSession
-        $uxHost = $uxSession.host
-        $SessionVar = $uxSession.Session
-    }
-    else {
-        if ($DefaultSession) {
-            $uxSessionObj = $DefaultSession
-            $uxHost = $DefaultSession.host
-            $SessionVar = $DefaultSession.session
-        }
-        Else {
-            Throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity)."
-        }
-    }
-    #endregion
+    
 
     #Region Refeshing the token, if needed
     #$ResponseCode = $((get-uxsysteminfo -uxSession $uxSessionObj).status.http_code)
@@ -529,15 +513,15 @@ Function New-UxResource {
 
 
  
-    $url = "https://$uxHost/rest/$resource/$Index"
+    $url = "https://$($uxSession.host)/rest/$resource/$Index"
     Write-verbose "Connecting to $url"
     Write-verbose "Adding: $Arguments "
     
     # Lets check the User Actually wants to make this change
-    $msg = "Adding A New Entry to $resource on the $uxhost Gateway with ID $Index"
+    $msg = "Adding A New Entry to $resource on the $$($uxSession.host) Gateway with ID $Index"
     if ($PSCmdlet.ShouldProcess($($msg))) {
         Try {
-            $uxrawdata = Invoke-RestMethod -Uri $url -Method PUT -Body $Arguments -WebSession $sessionvar -ErrorAction Stop
+            $uxrawdata = Invoke-RestMethod -Uri $url -Method PUT -Body $Arguments -WebSession $($uxSession.Session) -ErrorAction Stop
         }
 	
         Catch {
@@ -547,25 +531,15 @@ Function New-UxResource {
     
         $Result = ([xml]$uxrawdata.trim()).root
         $Success = $Result.status.http_code
-		
-        #Check if connection was successful.HTTP code 200 is returned
-        If ( $Success -ne "200") {
-            #Unable to Login
-            throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_"
+        
+        
+        switch ( $Success) {            
+            "200" { Write-Verbose "Happy with the response" }
+            "401" { throw "Error creating the new entry, is there an existing record at $url? .The error message is $_" } 
+            "500" { Write-Verbose -Message $uxrawdata; throw "Unable to create a new resource. Ensure you have entered a unique resource id.Verify this using `"get-uxresource`" cmdlet" }   
+            default { throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_" }
         }
 
-    
-        If ( $Success -eq "401") {
-            #Existing Resource
-            throw "Error creating the new entry, is there an existing record at $url? .The error message is $_"
-        }
-
-
-        #If 500 message is returned
-        If ( $Success -eq "500") {
-            Write-Verbose -Message $uxrawdata
-            throw "Unable to create a new resource. Ensure you have entered a unique resource id.Verify this using `"get-uxresource`" cmdlet"
-        }
 	
         # Return data and raw data in the verbose stream if needed.
         Write-Verbose $uxrawdata
@@ -997,8 +971,12 @@ Function Get-UxTransformationTable {
     Param(
         #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
         #Else it will look for the last created session using the command above
+        [Parameter(Mandatory = $false, Position = 1)]
+        [PSCustomObject]$uxSession,
+        #To find the ID of the transformation table execute "get-uxtransformationtable" cmdlet'
         [Parameter(Mandatory = $false, Position = 0)]
-        [PSCustomObject]$uxSession
+        [ValidateRange(1, [int]::MaxValue)]
+        [int]$uxTransformationTableId
         
     )
     Write-verbose "Called $($MyInvocation.MyCommand)"
@@ -1010,12 +988,84 @@ Function Get-UxTransformationTable {
         Details       = $true
     }
     if ($uxSession) { $ResourceSplat.uxSession = $uxSession }
+    $TopLevel = (get-uxresource @ResourceSplat).transformationtable
 
 
-    #Further filtering of the object for this option - Here we want to see the whole details of the object.
-    $Return = get-uxresource @ResourceSplat
-    Write-Output $return.transformationtable
+    if ($uxTransformationTableId) {
+        # We Need to pull the top Level First
+
+
+
+        $ResourceSplat = @{
+            resource      = "transformationtable/$uxtransformationtableid/transformationentry"
+            ReturnElement = "transformationentry_list"
+            Details       = $true
+        }
+        if ($uxSession) { $ResourceSplat.uxSession = $uxSession }
+        $SubLevel = (get-uxresource @ResourceSplat).transformationentry
+
+        #Lets Get The Sequence
+        $Seq = $TopLevel | Where-Object { $_.id -eq $uxTransformationTableId } | Select-Object -ExpandProperty Sequence
+        
+        $OrderedList = Get-UxOrderedList -Sequence $Seq -List $SubLevel
+      
+
+        # Lets Build a Temp object where we can store the top level then the entires.
+        $TempReturn = [PSCustomObject]@{
+            Table   = $TopLevel.transformationtable | Where-Object { $_.id -eq $uxTransformationTableId }
+            Entries = $OrderedList
+        }
+        
+        
+        # Lets Finally Build the Return Object 
+        return $OrderedList
+    }
+    else {
+        return $TopLevel
+    }
+        
     
+}
+
+Function Get-UxOrderedList {
+    <#
+	.SYNOPSIS      
+	 This cmdlet orders a list based on a sequence provided.
+	 
+	.DESCRIPTION
+     This function is mainly used internally to get a list of entries and sort the list based on their parent's sequence.
+     We add a XML entry, called ListOrder to each Entry which the user can then sort upon using the following command
+     $Results | Sort Listorder
+
+	.EXAMPLE
+	Get-UxOrderedList -Sequence $Seq -List $List
+    
+    
+    #>
+    
+    [cmdletbinding()]
+    Param(
+        # This parameter needs a string in the format '1,3,2,8' The function will then split tis internally to create an array
+        [Parameter(Mandatory = $true, Position = 0)]
+        [String]$Sequence,
+        # This parameter needs a List of entries from the SBC with an id element. Ideally in the "5:1" format.
+        [Parameter(Mandatory = $true, Position = 1)]
+        $List
+    )
+
+    $SeqArray = $Sequence.Split(",")
+    for ($i = 0; $i -lt $SeqArray.Count; $i++) {
+        #$SearchFilter = "{0}:{1}" -f $uxtransformationtableid, $SeqArray[$i]
+        $CurrentEntry = $List | Where-object { $_.id -like "*:$($SeqArray[$i])" }
+        $child = $CurrentEntry.OwnerDocument.CreateElement("ListOrder")
+        $child.InnerText = $($i + 1)
+
+        # This is Really funky... If you don't void the return, you will not get an output For $CurrentEntry.
+        [void]$CurrentEntry.AppendChild($child)
+        
+    }
+    return $($List | Sort ListOrder)
+
 }
 
 Function Get-UxTransformationEntry {
@@ -1024,7 +1074,8 @@ Function Get-UxTransformationEntry {
 	 This cmdlet reports The Transformation from Ribbon SBC.
 	 
 	.DESCRIPTION
-	 TBC
+     Gets all the entries but in an unordered form. As the sequence is stored at the level above 
+     use get-UxTransformationTable 'TableID' to get ordered list as per sequence.
 	
 	.EXAMPLE
 	get-uxtransformationEntry -uxTransformationTableId 4
@@ -1618,6 +1669,124 @@ Function New-UxSipServerEntry {
 
 }
 
+Function Get-UxCallRoutingTable {
+    <#
+	.SYNOPSIS      
+	 This cmdlet displays all the sipprofile names and ID's
+
+    .EXAMPLE
+	 get-UxSipProfile
+	   
+    .EXAMPLE
+    $Creds = Get-credential
+	$Obj = connect-uxgateway -uxhostname lyncsbc01.COMPANY.co.uk -Credentials $Creds
+	get-UxSipProfile -uxSession $Obj
+
+	#>
+    
+    [cmdletbinding()]
+    Param(
+        #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
+        #Else it will look for the last created session using the command above
+        [Parameter(Mandatory = $false, Position = 1)]
+        [PSCustomObject]$uxSession,
+        #If you want to filter send a profile id.
+        [Parameter(Mandatory = $false, Position = 0)]
+        [int]$CallRoutingTableId
+        
+    )
+    Write-verbose "Called $($MyInvocation.MyCommand)"
+    #$resource = Get-UxResourceName -functionname $MyInvocation.MyCommand
+    
+    $ResourceSplat = @{
+        resource      = "routingtable"
+        ReturnElement = "routingtable_list"
+        detail        = $true
+    }
+    if ($uxSession) { $ResourceSplat.uxSession = $uxSession }
+    $TopLevel = (get-uxresource @ResourceSplat).routingtable
+
+    if ($CallRoutingTableId) {
+        $ResourceSplat = @{
+            resource      = "routingtable/$CallRoutingTableId/routingentry"
+            ReturnElement = "routingentry_list"
+            detail        = $true
+        }
+        if ($uxSession) { $ResourceSplat.uxSession = $uxSession }    
+        $SubLevel = (get-uxresource @ResourceSplat).routingentry
+
+        $Seq = $TopLevel | Where-Object { $_.id -eq $CallRoutingTableId } | Select-Object -ExpandProperty Sequence
+        $OrderedList = Get-UxOrderedList -Sequence $Seq -List $SubLevel
+    
+
+        # Lets Build a Temp object where we can store the top level then the entires.
+        $TempReturn = [PSCustomObject]@{
+            Table   = $TopLevel | Where-Object { $_.id -eq $CallRoutingTableId }
+            Entries = $OrderedList
+        }
+        
+        
+        # Lets Finally Build the Return Object 
+        return $OrderedList
+    }
+    else {
+        return $TopLevel
+    }
+ 
+}
+
+
+Function Get-UxCallRoutingEntry {
+    <#
+	.SYNOPSIS      
+	 This cmdlet reports The Transformation from Ribbon SBC.
+	 
+	.DESCRIPTION
+     Gets all the entries but in an unordered form. As the sequence is stored at the level above 
+     use get-UxTransformationTable 'TableID' to get ordered list as per sequence.
+	
+	.EXAMPLE
+	get-uxtransformationEntry -uxTransformationTableId 4
+    
+    .EXAMPLE
+    $Creds = Get-credential
+	$Obj = connect-uxgateway -uxhostname lyncsbc01.COMPANY.co.uk -Credentials $Creds
+	get-uxtransformationtable -uxSession $Obj -uxTransformationTableId 4
+
+	#>
+    
+    [cmdletbinding()]
+    Param(
+        #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
+        #Else it will look for the last created session using the command above
+        [Parameter(Mandatory = $false, Position = 1)]
+        [PSCustomObject]$uxSession,
+        #To find the ID of the transformation table execute "get-uxtransformationtable" cmdlet'
+        [Parameter(Mandatory = $true, Position = 0)]
+        [ValidateRange(1, [int]::MaxValue)]
+        [int]$CallRoutingTableId
+
+        
+    )
+    Write-verbose "Called $($MyInvocation.MyCommand)"
+    #$resource = Get-UxResourceName -functionname $MyInvocation.MyCommand
+    
+    $ResourceSplat = @{
+        resource      = "routingtable/$CallRoutingTableId/routingentry"
+        ReturnElement = "routingentry_list"
+        Details       = $true
+    }
+    if ($uxSession) { $ResourceSplat.uxSession = $uxSession }
+
+
+    #Further filtering of the object for this option - Here we want to see the whole details of the object.
+    $Return = get-uxresource @ResourceSplat
+    Write-Output $return.routingentry
+    
+}
+
+
+
 #Function to get sipprofile
 Function Get-UxSipProfile {
     <#
@@ -2080,7 +2249,7 @@ Function Restart-UxGateway {
 
     $Status = Send-UxCommand -uxSession $uxSessionObj -Command reboot -ReturnElement status
     If ($status.http_code -eq "200") {
-        Write-Host "Reboot initiated and completed succesfully" 
+        Write-Output "Reboot initiated and completed succesfully" 
     }
 }
 
