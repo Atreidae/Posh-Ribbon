@@ -378,7 +378,7 @@ Function Get-UxResource {
         [pscredential]$Credentials
 
     )
-    
+    <#
     #Region Getting Session
     if ($uxSession) {
         $uxSessionObj = $uxSession
@@ -405,9 +405,9 @@ Function Get-UxResource {
     #   Throw "Session Expired or problem connecting to Box - Rerun Connect-uxGateway"
     #}
     #endregion
+    #>
 
-
-    $args1 = $Arguments
+    
     $url = "https://$($uxSession.host)/rest/$resource"
     if ($Details) {
         $url += "?details=true" 
@@ -576,7 +576,7 @@ Function Send-UxCommand {
     [cmdletbinding(SupportsShouldProcess = $True, ConfirmImpact = "High")]
     Param(
         [Parameter(Mandatory = $false, Position = 1)]
-        [PSCustomObject]$uxSession,
+        [PSCustomObject]$uxSession = $DefaultSession,
 
         [Parameter(Mandatory = $true, Position = 0)]
         [string]$Command,
@@ -596,23 +596,7 @@ Function Send-UxCommand {
 
     )
     
-    #Region Getting Session
-    if ($uxSession) {
-        $uxSessionObj = $uxSession
-        $uxHost = $uxSession.host
-        $SessionVar = $uxSession.Session
-    }
-    else {
-        if ($DefaultSession) {
-            $uxSessionObj = $DefaultSession
-            $uxHost = $DefaultSession.host
-            $SessionVar = $DefaultSession.session
-        }
-        Else {
-            Throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity)."
-        }
-    }
-    #endregion
+
 
     #Region Refeshing the token, if needed
     #$ResponseCode = $((get-uxsysteminfo -uxSession $uxSessionObj).status.http_code)
@@ -624,19 +608,19 @@ Function Send-UxCommand {
     #endregion
 
     # The Command MUST be in lowercase so converting
-    $url = "https://$uxHost/rest/system?action=$($command.ToLower())"
+    $url = "https://$($uxSession.host)/rest/system?action=$($command.ToLower())"
     Write-verbose "Connecting to $url"
     Write-verbose "Adding: $Arguments"
     
     # Lets check the User Actually wants to make this change
-    $msg = "Running $Command on the $uxhost Gateway"
+    $msg = "Running $Command on the $($uxSession.host) Gateway"
     if ($PSCmdlet.ShouldProcess($($msg))) {
         Try {
             $options = @{
                 uri         = $url
                 Method      = "POST"
                 Body        = $Arguments
-                WebSession  = $SessionVar
+                WebSession  = $uxSession.Session
                 ErrorAction = "Stop"
             }
             if ($OutPutFilename) { $options.OutFile = $OutPutFilename }
@@ -652,26 +636,12 @@ Function Send-UxCommand {
         $Result = ([xml]$uxrawdata.trim()).root
         $Success = $Result.status.http_code
         
-        
-        If ( $Success -eq "401") {
-            #Existing Resource
-            throw "Error running Command .The error message is $_"
-        }
-
-
-        #If 500 message is returned
-        If ( $Success -eq "500") {
-            Write-Verbose -Message $uxrawdata
-            throw "Error running Command .The error message is $_"
-        }
-
-        #Check if connection was successful.HTTP code 200 is returned
-        If ( $Success -ne "200") {
-            #Unable to Login
-            throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_"
-        }
-
-    
+        switch ( $Success) {            
+            "200" { Write-Verbose "Happy with the response" }
+            "401" { throw "Error creating the new entry, is there an existing record at $url? .The error message is $_" } 
+            "500" { Write-Verbose -Message $uxrawdata; throw "Unable to create a new resource. Ensure you have entered a unique resource id.Verify this using `"get-uxresource`" cmdlet" }   
+            default { throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_" }
+        }   
        
 	
         # Return data and raw data in the verbose stream if needed.
@@ -729,7 +699,7 @@ Function Remove-UxResource {
     [cmdletbinding(SupportsShouldProcess = $True, ConfirmImpact = "High")]
     Param(
         [Parameter(Mandatory = $false, Position = 0)]
-        [PSCustomObject]$uxSession,
+        [PSCustomObject]$uxSession = $DefaultSession,
 
         [Parameter(Mandatory = $true, Position = 1)]
         [string]$resource,
@@ -748,40 +718,23 @@ Function Remove-UxResource {
 
     )
 
-    #Region Getting Session
-    if ($uxSession) {
-        $uxSessionObj = $uxSession
-        $uxHost = $uxSession.host
-        $SessionVar = $uxSession.Session
-    }
-    else {
-        if ($DefaultSession) {
-            $uxSessionObj = $DefaultSession
-            $uxHost = $DefaultSession.host
-            $SessionVar = $DefaultSession.session
-        }
-        Else {
-            Throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity)."
-        }
-    }
-    #endregion
-    
+      
     if ($resource -contains "http://") {
         Throw "Resource is not properly formatted. Please only pass the resource you wish to remove not the whole address such as transformationtable then index of the entry"
     }
 
     #The URL  which will be passed to the UX
-    $url = "https://$uxHost/rest/$resource"
+    $url = "https://$($uxSession.host)/rest/$resource"
     if ($index) { $url += "/$index" }
     Write-verbose "Removing $url"
     Write-verbose "With: $Arguments "
     
 
-    $msg = "Deleting A New Entry to $resource on the $uxhost Gateway"
+    $msg = "Deleting A New Entry to $resource on the $($uxSession.host) Gateway"
     if ($index) { $msg += "with ID $Index" }
     if ($PSCmdlet.ShouldProcess($($msg))) {
         Try {
-            $uxrawdata = Invoke-RestMethod -Uri $url -Method DELETE -Body $Arguments -WebSession $sessionvar -ErrorAction Stop
+            $uxrawdata = Invoke-RestMethod -Uri $url -Method DELETE -Body $Arguments -WebSession $uxSession.Session -ErrorAction Stop
         }
 	
         Catch {
@@ -793,26 +746,13 @@ Function Remove-UxResource {
         $Success = $Result.status.http_code
 		
         
-       
-
-    
-        If ( $Success -eq "401") {
-            #Existing Resource
-            throw "Error creating the new entry, is there an existing record at $url? .The error message is $_"
+        switch ( $Success) {            
+            "200" { Write-Verbose "Happy with the response" }
+            "401" { throw "Error creating the new entry, is there an existing record at $url? .The error message is $_" } 
+            "500" { Write-Verbose -Message $uxrawdata; throw "Unable to create a new resource. Ensure you have entered a unique resource id.Verify this using `"get-uxresource`" cmdlet" }   
+            default { throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_" }
         }
 
-
-        #If 500 message is returned
-        If ( $Success -eq "500") {
-            Write-Verbose -Message $uxrawdata
-            throw "Unable to create a new resource. Ensure you have entered a unique resource id.Verify this using `"get-uxresource`" cmdlet"
-        }
-
-        #Check if connection was successful.HTTP code 200 is returned
-        If ( $Success -ne "200") {
-            #Unable to Login
-            throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_"
-        }
 	
         # Return data and raw data in the verbose stream if needed.
         Write-Verbose $uxrawdata
@@ -862,7 +802,7 @@ Function Set-UxResource {
     [cmdletbinding(SupportsShouldProcess = $True, ConfirmImpact = "High")]
     Param(
         [Parameter(Mandatory = $false, Position = 5)]
-        [PSCustomObject]$uxSession,
+        [PSCustomObject]$uxSession = $DefaultSession,
 
         [Parameter(Mandatory = $true, Position = 0)]
         [string]$resource,
@@ -881,61 +821,31 @@ Function Set-UxResource {
 
     )
 
-    #Region Getting Session
-    if ($uxSession) {
-        $uxSessionObj = $uxSession
-        $uxHost = $uxSession.host
-        $SessionVar = $uxSession.Session
-    }
-    else {
-        if ($DefaultSession) {
-            $uxSessionObj = $DefaultSession
-            $uxHost = $DefaultSession.host
-            $SessionVar = $DefaultSession.session
-        }
-        Else {
-            Throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity)."
-        }
-    }
-    #endregion
-	
+ 	
     #The URL  which will be passed to the UX
-    $url = "https://$uxHost/rest/$resource/$index"
+    $url = "https://$($uxSession.host)/rest/$resource/$index"
     Write-verbose "Editing $url"
     Write-verbose "With: $Arguments "
     
 
-    $msg = "Deleting A New Entry to $resource on the $uxhost Gateway with ID $Index"
+    $msg = "Deleting A New Entry to $resource on the $($uxSession.host) Gateway with ID $Index"
     if ($PSCmdlet.ShouldProcess($($msg))) {
         Try {
-            $uxrawdata = Invoke-RestMethod -Uri $url -Method POST -Body $Arguments -WebSession $sessionvar -ErrorAction Stop
+            $uxrawdata = Invoke-RestMethod -Uri $url -Method POST -Body $Arguments -WebSession $uxSession.Session -ErrorAction Stop
         }
 	
         Catch {
             throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_"
         }
-	
-    
+	    
         $Result = ([xml]$uxrawdata.trim()).root
         $Success = $Result.status.http_code
-		
-    
-        If ( $Success -eq "401") {
-            #Existing Resource
-            throw "Error creating the new entry, is there an existing record at $url? .The error message is $_"
-        }
-
-
-        #If 500 message is returned
-        If ( $Success -eq "500") {
-            Write-Verbose -Message $uxrawdata
-            throw "Unable to create a new resource. Ensure you have entered a unique resource id.Verify this using `"get-uxresource`" cmdlet"
-        }
-
-        #Check if connection was successful.HTTP code 200 is returned
-        If ( $Success -ne "200") {
-            #Unable to Login
-            throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_"
+	    
+        switch ( $Success) {            
+            "200" { Write-Verbose "Happy with the response" }
+            "401" { throw "Error creating the new entry, is there an existing record at $url? .The error message is $_" } 
+            "500" { Write-Verbose -Message $uxrawdata; throw "Unable to create a new resource. Ensure you have entered a unique resource id.Verify this using `"get-uxresource`" cmdlet" }   
+            default { throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_" }
         }
 	
         # Return data and raw data in the verbose stream if needed.
@@ -1011,10 +921,10 @@ Function Get-UxTransformationTable {
       
 
         # Lets Build a Temp object where we can store the top level then the entires.
-        $TempReturn = [PSCustomObject]@{
-            Table   = $TopLevel.transformationtable | Where-Object { $_.id -eq $uxTransformationTableId }
-            Entries = $OrderedList
-        }
+        #$TempReturn = [PSCustomObject]@{
+        #    Table   = $TopLevel.transformationtable | Where-Object { $_.id -eq $uxTransformationTableId }
+        #    Entries = $OrderedList
+        #}
         
         
         # Lets Finally Build the Return Object 
@@ -1064,7 +974,7 @@ Function Get-UxOrderedList {
         [void]$CurrentEntry.AppendChild($child)
         
     }
-    return $($List | Sort ListOrder)
+    return $($List | Sort-Object ListOrder)
 
 }
 
@@ -1148,10 +1058,10 @@ Function New-UxTransformationTable {
     # First thing we need to do is get a new TableId
     try {
         if ($uxSession) {
-            [int]$NewTransformationTableId = (get-uxtransformationtable -uxSession $uxSession | select -ExpandProperty id | measure -Maximum).Maximum + 1 
+            [int]$NewTransformationTableId = (get-uxtransformationtable -uxSession $uxSession | select-object -ExpandProperty id | Measure-Object -Maximum).Maximum + 1 
         }
         else {
-            [int]$NewTransformationTableId = (get-uxtransformationtable | select -ExpandProperty id | measure -Maximum).Maximum + 1 
+            [int]$NewTransformationTableId = (get-uxtransformationtable | select-object -ExpandProperty id | Measure-Object -Maximum).Maximum + 1 
         }
     }
     catch {
@@ -1272,10 +1182,10 @@ Function New-UxTransformationEntry {
     #DEPENDENCY ON get-uxtransformationentry FUNCTION TO GET THE NEXT AVAILABLE TRANSFORMATIONTABLEID
     try {
         if ($uxSession) {
-            [int]$NewTransformationEntryId = (get-uxtransformationentry -uxTransformationTableId $TransformationTableId -uxSession $uxSession | Select-Object -ExpandProperty id | ForEach-Object { $_.split(":")[1] } | measure -Maximum).Maximum + 1 
+            [int]$NewTransformationEntryId = (get-uxtransformationentry -uxTransformationTableId $TransformationTableId -uxSession $uxSession | Select-Object -ExpandProperty id | ForEach-Object { $_.split(":")[1] } | Measure-Object -Maximum).Maximum + 1 
         }
         else {
-            [int]$NewTransformationEntryId = (get-uxtransformationentry -uxTransformationTableId $TransformationTableId | Select-Object -ExpandProperty id | ForEach-Object { $_.split(":")[1] } | measure -Maximum).Maximum + 1 
+            [int]$NewTransformationEntryId = (get-uxtransformationentry -uxTransformationTableId $TransformationTableId | Select-Object -ExpandProperty id | ForEach-Object { $_.split(":")[1] } | Measure-Object -Maximum).Maximum + 1 
         }
     }
     catch {
@@ -1405,10 +1315,10 @@ Function New-UxSipServerTable {
     # First thing we need to do is get a new TableId
     try {
         if ($uxSession) {
-            [int]$sipservertableid = (get-uxsipservertable -uxSession $uxSession | Select -ExpandProperty id | measure -Maximum).Maximum + 1 
+            [int]$sipservertableid = (get-uxsipservertable -uxSession $uxSession | Select-Object -ExpandProperty id | Measure-Object -Maximum).Maximum + 1 
         }
         else {
-            [int]$sipservertableid = (get-uxsipservertable | Select -ExpandProperty id | measure -Maximum).Maximum + 1 
+            [int]$sipservertableid = (get-uxsipservertable | Select-Object -ExpandProperty id | Measure-Object -Maximum).Maximum + 1 
         }
     }
     catch {
@@ -1620,10 +1530,10 @@ Function New-UxSipServerEntry {
     # First thing we need to do is get a new TableId
     try {
         if ($uxSession) {
-            [int]$sipserverentryid = (get-uxsipservertableentry -uxSipServerTableId $SipServerTableId  -uxSession $uxSession | Select-Object -ExpandProperty id | ForEach-Object { $_.split(":")[1] } | measure -Maximum).Maximum + 1 
+            [int]$sipserverentryid = (get-uxsipservertableentry -uxSipServerTableId $SipServerTableId  -uxSession $uxSession | Select-Object -ExpandProperty id | ForEach-Object { $_.split(":")[1] } | measure-Object -Maximum).Maximum + 1 
         }
         else {
-            [int]$sipserverentryid = (get-uxsipservertableentry -uxSipServerTableId $SipServerTableId | Select-Object -ExpandProperty id | ForEach-Object { $_.split(":")[1] } | measure -Maximum).Maximum + 1 
+            [int]$sipserverentryid = (get-uxsipservertableentry -uxSipServerTableId $SipServerTableId | Select-Object -ExpandProperty id | ForEach-Object { $_.split(":")[1] } | measure-Object -Maximum).Maximum + 1 
         }
     }
     catch {
@@ -1720,10 +1630,10 @@ Function Get-UxCallRoutingTable {
     
 
         # Lets Build a Temp object where we can store the top level then the entires.
-        $TempReturn = [PSCustomObject]@{
-            Table   = $TopLevel | Where-Object { $_.id -eq $CallRoutingTableId }
-            Entries = $OrderedList
-        }
+        #$TempReturn = [PSCustomObject]@{
+        #    Table   = $TopLevel | Where-Object { $_.id -eq $CallRoutingTableId }
+        #    Entries = $OrderedList
+        #}
         
         
         # Lets Finally Build the Return Object 
@@ -1938,10 +1848,10 @@ Function New-UxSipProfile {
     # First thing we need to do is get a new TableId
     try {
         if ($uxSession) {
-            [int]$sipprofileid = (get-uxsipprofile -uxSession $uxSession | Select-Object -ExpandProperty id | measure -Maximum).Maximum + 1 
+            [int]$sipprofileid = (get-uxsipprofile -uxSession $uxSession | Select-Object -ExpandProperty id | measure-Object -Maximum).Maximum + 1 
         }
         else {
-            [int]$sipprofileid = (get-uxsipprofile | Select-Object -ExpandProperty id | measure -Maximum).Maximum + 1 
+            [int]$sipprofileid = (get-uxsipprofile | Select-Object -ExpandProperty id | measure-Object -Maximum).Maximum + 1 
         }
     }
     catch {
@@ -1966,7 +1876,7 @@ Function New-UxSipProfile {
 
     Write-Verbose "Submitting Data"
     Write-verbose "Returning the updated table"
-    $msg = "Adding A New Entry to sipprofile Table on the Gateway with ID $sipprofileid"
+    $msg = "Adding A New Entry to sipprofile Table on the {0} Gateway with ID {1}" -f $uxSession.host , $sipprofileid
     if ($PSCmdlet.ShouldProcess($($msg))) {
         $Return = new-uxresource @ResourceSplat -WhatIf:$PSBoundParameters.ContainsKey('WhatIf') -Confirm:$false      
     }
@@ -2057,13 +1967,13 @@ Function New-UxSignalGroup {
 	 new-uxsignalgroup -Description "LyncToPBX"
 	
 	#>
-    [cmdletbinding()]
+    [cmdletbinding(SupportsShouldProcess = $True, ConfirmImpact = "High")]
     Param(
         [Parameter(Mandatory = $true, Position = 0, HelpMessage = 'Short description/name of the SG')]
         [ValidateLength(1, 64)]
         [string]$Description ,
 
-        [Parameter(Mandatory = $true, Position = 1, HelpMessage = 'Enable or Disable this signaling group')]
+        [Parameter(Mandatory = $false, Position = 1, HelpMessage = 'Enable or Disable this signaling group')]
         [ValidateSet(0, 1)]
         [int]$CustomAdminState = 1 ,
 
@@ -2118,10 +2028,10 @@ Function New-UxSignalGroup {
     # First thing we need to do is get a new TableId
     try {
         if ($uxSession) {
-            [int]$newSipSigid = (get-uxsignalgroup -uxSession $uxSession | Select-Object -ExpandProperty id | measure -Maximum).Maximum + 1 
+            [int]$newSipSigid = (get-uxsignalgroup -uxSession $uxSession | Select-Object -ExpandProperty id | measure-Object -Maximum).Maximum + 1 
         }
         else {
-            [int]$newSipSigid = (get-uxsignalgroup | Select-Object -ExpandProperty id | measure -Maximum).Maximum + 1 
+            [int]$newSipSigid = (get-uxsignalgroup | Select-Object -ExpandProperty id | measure-Object -Maximum).Maximum + 1 
         }
     }
     catch {
