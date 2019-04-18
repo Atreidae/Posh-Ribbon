@@ -982,21 +982,37 @@ Function Copy-UxTransformationTables {
 
      The cmdlet will enumerate through the entries unless you use the -confirm:$false parameter
 
-	.EXAMPLE
-	Copy-UxTransformationTables -SourceSession $SourceGateWay -DestinationSession $DestinationGateway
+     Unless specified all entries will be marked as disabled when moved to other SBC. We will also update the description on the destination
+     SBC with a small tag which shows what the order they were in on the source AND the enabled status at time of copying.
+
+    .EXAMPLE
+    $SourceCreds = Get-Credential
+    
+    PS:> $DestinationCreds = Get-Credential
+    
+    PS:> $SourceGateWay = Connect-uxGateway -uxhostname 192.168.1.51 -credentials $SourceCreds
+    
+    PS:> $DestinationGateway = Connect-uxGateway -uxhostname 192.168.1.52 -credentials $DestinationCreds
+    
+    PS:> Copy-UxTransformationTables -SourceSession $SourceGateWay -DestinationSession $DestinationGateway
+    
+
+    This example is a basic copy all entries.
     
     
     #>
     [cmdletbinding(SupportsShouldProcess = $True, ConfirmImpact = "High")]
     Param(
-        #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
-        #Else it will look for the last created session using the command above
+        # This is the source session where you want to copy the rules from
         [Parameter(Mandatory = $true, Position = 0)]
         [PSCustomObject]$SourceSession,
-        #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
-        #Else it will look for the last created session using the command above
+        # This is the destination session See help how to create a session variable
         [Parameter(Mandatory = $true, Position = 1)]
         [PSCustomObject]$DestinationSession,
+        #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
+        #Else it will look for the last created session using the command above
+        [Parameter(Mandatory = $false, Position = 2)]
+        [int]$TableID,
         #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
         #Else it will look for the last created session using the command above
         [Parameter(Mandatory = $false, Position = 3)]
@@ -1019,8 +1035,13 @@ Function Copy-UxTransformationTables {
         Throw "$($DestinationSession.host) Session has problems, please ensure both sessions have been accessed in the last 10 mins."
     }
     Write-verbose "Both Sessions Appear to be ok, continuing"
-    
-    $SourceTransformationTable = Get-UxTransformationTable -uxSession $1stGateway -Verbose:$false
+    if ($TableID) {
+        $SourceTransformationTable = Get-UxTransformationTable -uxSession $SourceSession -Verbose:$false | Where { $_.id -eq $TableID }
+        Write-Verbose "Getting $($SourceTransformationTable.description) Only"
+    }
+    Else { 
+        $SourceTransformationTable = Get-UxTransformationTable -uxSession $SourceSession -Verbose:$false
+    }
     foreach ($Entry in $SourceTransformationTable) {
         $EntryObject = ($Entry | New-UxURLandPSObject).posh
         $EntryObject.Description += " - Copy from $($SourceSession.host)"
@@ -1062,10 +1083,8 @@ Function Copy-UxTransformationTables {
 
         Write-Verbose "Submitting Data"
         
-        if (-not $all) {
-            Write-host = "Adding A New Entry to Transformation Table on the $($DestinationSession.host) Gateway with ID $NewTransformationTableId"
-        }
-        $msg = "Adding A New Entry to Transformation Table on the $($DestinationSession.host) Gateway with ID $NewTransformationTableId"
+        Write-Verbose "Adding $($EntryObject.Description) to Transformation Table on the $($DestinationSession.host) Gateway with ID $NewTransformationTableId"
+        $msg = "Adding $($EntryObject.Description) to Transformation Table on the $($DestinationSession.host) Gateway with ID $NewTransformationTableId"
         if ($PSCmdlet.ShouldProcess($($msg))) {
             Write-verbose "Returning the updated table"
             $NewTableResult = new-uxresource @ResourceSplat -WhatIf:$PSBoundParameters.ContainsKey('WhatIf')
@@ -1095,7 +1114,7 @@ Function Copy-UxTransformationTables {
                 $HTMLFormated = ($PoshObject | New-UxURLandPSObject).HtmlStr
             
                 # Lets Get the next Entr ID
-                [int]$NewTransformationEntryId = (get-uxtransformationentry -uxTransformationTableId $NewTableResult.id -uxSession $DestinationSession | Select-Object -ExpandProperty id | ForEach-Object { $_.split(":")[1] } | Measure-Object -Maximum).Maximum + 1 
+                [int]$NewTransformationEntryId = (get-uxtransformationentry -uxTransformationTableId $NewTableResult.id -uxSession $DestinationSession -verbose:$false | Select-Object -ExpandProperty id | ForEach-Object { $_.split(":")[1] } | Measure-Object -Maximum).Maximum + 1 
 
                 Write-Verbose "Gonna Add this"
                 Write-Verbose $HTMLFormated
@@ -1107,7 +1126,8 @@ Function Copy-UxTransformationTables {
                     ReturnElement = "transformationtable"
                     uxSession     = $DestinationSession
                     Arguments     = $HTMLFormated
-                   
+                    verbose       = $false
+                    confirm       = $false
                 }
                 try {
                     $EntryReturn = new-uxresource @EntrySplat -WhatIf:$PSBoundParameters.ContainsKey('WhatIf') 
