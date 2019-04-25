@@ -6,7 +6,7 @@
 	  
 	  For the module to run correctly following pre-requisites should be met:
 	  1) PowerShell v4.0
-	  2) Ribbon SBC Edge on R3.0 or higher
+	  2) Ribbon SBC Edge on R3.0 or higher ( Tested on SBC R8.0 )
 	  3) Create REST logon credentials (http://www.allthingsuc.co.uk/accessing-sonus-ux-with-rest-apis/)
     
       Once you have created the account use help Connect-UxGateway to get started.
@@ -20,15 +20,19 @@
         
 		
 		Version History:
-		Version 1.0 - 30/11/13 - Module Created - Vikas Jaswal
-		Version 1.1 - 03/12/13 - Added new-ux*, restart-ux*, and get-uxresource cmdlets - Vikas Jaswal
-		Version 1.2 - 02/10/16 - Added get-uxsipservertable, new-uxsippservertable cmdlets - Kjetil Lindløkken
-		Version 1.3 - 02/10/18 - Added get-uxsipprofile, Get-uxsipprofileid, get-uxsipservertableentry cmdlets - Kjetil Lindløkken
-		Version 1.4 - 03/10/18 - Added new-uxsipserverentry cmdlet - Kjetil Lindløkken
-		Version 1.5 - 03/10/18 - Added optional parameter to the get-uxsipprofile cmdlet to add id directly - Kjetil Lindløkken
-		Version 1.6 - 04/10/18 - Added new-uxsipprofile cmdlet - Kjetil Lindløkken
+        Version 2.0.1 - 25/04/19 - Updated with some more Get and New Commands especially Call Routing Table - Chris Burns
+        Version 2.0 - 15/04/19 - *NEW Version* - Rewrite for modern module design, better use of [XML] accelerator and details switch,
+                                 a new custom uxSession Object to allow for access to multiple SBC's at once and a Custom XML -> PSObject Parser - Chris Burns
+        
 		Version 1.7 - 20/12/18 - Match Ribbon rebranding, Update link to Ribbon Docs - Adrien Plessis
-		Version 2.0 - 15/04/19 - Rewrite for modern module design. And better use of [XML] accelerator and details switch. - Chris Burns
+        Version 1.6 - 04/10/18 - Added new-uxsipprofile cmdlet - Kjetil Lindløkken
+        Version 1.5 - 03/10/18 - Added optional parameter to the get-uxsipprofile cmdlet to add id directly - Kjetil Lindløkken
+        Version 1.4 - 03/10/18 - Added new-uxsipserverentry cmdlet - Kjetil Lindløkken
+        Version 1.3 - 02/10/18 - Added get-uxsipprofile, Get-uxsipprofileid, get-uxsipservertableentry cmdlets - Kjetil Lindløkken
+        Version 1.2 - 02/10/16 - Added get-uxsipservertable, new-uxsippservertable cmdlets - Kjetil Lindløkken
+        Version 1.1 - 03/12/13 - Added new-ux*, restart-ux*, and get-uxresource cmdlets - Vikas Jaswal
+        Version 1.0 - 30/11/13 - Module Created - Vikas Jaswal
+        
 		
 		Please use the script at your own risk!
 	
@@ -162,9 +166,15 @@ Function Get-UxSystemInfo {
     Gets System information from the last connected SBC. 
 
 	.EXAMPLE
-	$Creds = Get-credential
-	$Obj = connect-uxgateway -uxhostname lyncsbc01.COMPANY.co.uk -Credentials $Creds
-	get-uxSystemInfo -uxSession $obj
+    $Creds = Get-credential
+    
+	PS:>$Obj = connect-uxgateway -uxhostname lyncsbc01.COMPANY.co.uk -Credentials $Creds
+    
+    PS:>get-uxSystemInfo -uxSession $obj
+
+    This example stores the credential in a credential object and uses that credential to store a uxSession Object.
+    With this object we can now call the get-uxSystemInfo for any session object. Therby allowing us to get information from
+    any amount of SBC's.
 	
 	#>
 	
@@ -203,8 +213,14 @@ Function Get-UxSystemCallStats {
     
     .EXAMPLE
     $Creds = Get-credential
-	$Obj = connect-uxgateway -uxhostname lyncsbc01.COMPANY.co.uk -Credentials $Creds
-	get-uxsystemcallstats -uxSession $Obj
+    
+    PS:>$Obj = connect-uxgateway -uxhostname lyncsbc01.COMPANY.co.uk -Credentials $Creds
+    
+    PS:>get-UxSystemCallStats -uxSession $obj
+
+    This example stores the credential in a credential object and uses that credential to store a uxSession Object.
+    With this object we can now call the get-UxSystemCallStats for any session object. Therby allowing us to get call stats from
+    any amount of SBC's.
 
 	#>
     
@@ -232,7 +248,7 @@ Function Get-UxSystemCallStats {
 Function Get-UxSystemLog {
     <#
 	.SYNOPSIS      
-	 This cmdlet reports Call statistics from Ribbon SBC.
+	 This cmdlet reports the call logging level for a specified SBC.
 	 
 	.DESCRIPTION
 	 This cmdlet report Call statistics (global level only) from Ribbon SBC eg: Calls failed, Calls Succeeded, Call Currently Up, etc.
@@ -242,8 +258,10 @@ Function Get-UxSystemLog {
     
     .EXAMPLE
     $Creds = Get-credential
-	$Obj = connect-uxgateway -uxhostname lyncsbc01.COMPANY.co.uk -Credentials $Creds
-	get-UxSystemLog -uxSession $Obj
+
+	PS:> $Obj = connect-uxgateway -uxhostname lyncsbc01.COMPANY.co.uk -Credentials $Creds
+    
+    PS:> get-UxSystemLog -uxSession $Obj
 
 	#>
     

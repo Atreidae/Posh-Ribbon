@@ -1,6 +1,9 @@
 # RibbonSBCEdge Powershell Module
 This project is a Powershell module that allow to control Ribbon SBC Edge with REST API.
-This Module is not endorsed nor created by Ribbon Communications but created and managed by a third party
+
+**This project is completely independent from Ribbon Communication. Ribbon is not responsible for any issue with this module. If you have issue with Ribbon product contact the Ribbon support.**
+
+
 
 This is Version 2 of the Module which has been developed and rewrote from the ground up to better comply with
 PowerShell Module Design and provide a more modular approach to the cmdlets. Extending the cmdlets is much
@@ -8,12 +11,28 @@ easier now as they rely on a single "engine" to do the heavy lifting.
 
 Adding additional "Get Modules" SHOULD be relatively simple. Just take a look at the existing cmdlets.
 
-This 2nd Version was written By Chris Burns from GCIcom. http://www.posh.dev
+## Version History
 
+Version 2 is a rewrite and a more modular design By Chris Burns from GCIcom. http://www.posh.dev
 Version 1 was written by Vikas Jaswal. http://www.allthingsuc.co.uk/about-me/
 
+    Version 2.0.1   25/04/19    -  Updated with some more Get and New Commands especially Call Routing Table - Chris Burns
+    Version 2.0     15/04/19    -  *NEW Version* - Rewrite for modern module design, better use of [XML] accelerator and details switch,
+                                    a new custom uxSession Object to allow for access to multiple SBC's at once and a Custom XML -> PSObject Parser - Chris Burns
+
+    Version 1.7     20/12/18    - Match Ribbon rebranding, Update link to Ribbon Docs - Adrien Plessis
+    Version 1.6     04/10/18    - Added new-uxsipprofile cmdlet - Kjetil Lindløkken
+    Version 1.5     03/10/18    - Added optional parameter to the get-uxsipprofile cmdlet to add id directly - Kjetil Lindløkken
+    Version 1.4     03/10/18    - Added new-uxsipserverentry cmdlet - Kjetil Lindløkken
+    Version 1.3     02/10/18    - Added get-uxsipprofile, Get-uxsipprofileid, get-uxsipservertableentry cmdlets - Kjetil Lindløkken
+    Version 1.2     02/10/16    - Added get-uxsipservertable, new-uxsippservertable cmdlets - Kjetil Lindløkken
+    Version 1.1     03/12/13    - Added new-ux*, restart-ux*, and get-uxresource cmdlets - Vikas Jaswal
+    Version 1.0     30/11/13    - Module Created - Vikas Jaswal
+
+
+
 Seeing the number of people using this Powershell module and making update on their own, I asked Vikas the authorization to post this code on Github to start a collaboration.
-**This project is completely independent from Ribbon Communication. Ribbon is not responsible for any issue with this module. If you have issue with Ribbon product contact the Ribbon support.**
+
 
 Everyone is free to collaborate on this project or request new feature.
 
@@ -42,7 +61,7 @@ PS: Thanks again Vikas Jaswal for starting this module.
 
 1. Will be submitted to PowerShell Gallery and eventually can be installed with Install-Module RibbonSBCEdge
 
-DEV's
+#### DEV's
 
 1. Download the RibbonEdgePsRest PowerShell module from the button "Clone or download"
 2. Copy the module to your machine. Ideally you want to copy the module to one of the following locations as these are default locations where PowerShell looks for modules when import-module is executed.
@@ -54,7 +73,7 @@ DEV's
 4. To discover what cmdlets are available execute: get-command –module RibbonSBCEdge. Full PowerShell cmdlet help is available for all cmdlets.
 5. For complete usage, see: http://www.allthingsuc.co.uk/powershell-module-for-sonus-sbc-10002000/
 
-Cmdlets Included
+## Cmdlets Included
 
         'Connect-UxGateway',
         'Get-UxSystemInfo',
@@ -63,8 +82,11 @@ Cmdlets Included
         'Get-UxCallRoutingTable',
         'Get-UxCallRoutingEntry',
         'New-UxCallRoutingTable',
+        'New-UxCallRoutingEntry',
         'Invoke-UxBackup',
         'Get-UxResource',
+        'Get-uxTableToParameter',
+        'Get-UxReRouteTable',
         'New-UxResource',
         'Send-UxCommand',
         'Remove-UxResource',
