@@ -60,6 +60,9 @@ Cmdlets Included
         'Get-UxSystemInfo',
         'Get-UxSystemCallStats',
         'Get-UxSystemLog',
+        'Get-UxCallRoutingTable',
+        'Get-UxCallRoutingEntry',
+        'New-UxCallRoutingTable',
         'Invoke-UxBackup',
         'Get-UxResource',
         'New-UxResource',
@@ -78,4 +81,5 @@ Cmdlets Included
         'New-UxSignalGroup',
         'New-UxSipServerTable',
         'New-UxSipServerEntry',
+        'Copy-UxTransformationTables',
         'Restart-UxGateway'

@@ -64,6 +64,11 @@ Function Connect-UxGateway {
 	$Creds = Get-credential
 	connect-uxgateway -uxhostname lyncsbc01.COMPANY.co.uk -Credentials $Creds
 
+    .EXAMPLE
+	$Creds = Get-credential
+    $Session1 = connect-uxgateway -uxhostname lyncsbc01.COMPANY.co.uk -Credentials $Creds
+    $Session2 = connect-uxgateway -uxhostname lyncsbc02.COMPANY.co.uk -Credentials $Creds
+
 	.OUTPUT
 	The cmdlet will return a uxSession variable which can be stored and used with multiple cmdlets. - This object includes the name, websession and credentials.
 	
@@ -1480,7 +1485,10 @@ Function Get-UxSipServerTable {
 	
 	.EXAMPLE
 	 get-uxsipservertable
-	   
+       
+    .EXAMPLE
+	 get-uxsipservertable 3
+
     .EXAMPLE
     $Creds = Get-credential
 	$Obj = connect-uxgateway -uxhostname lyncsbc01.COMPANY.co.uk -Credentials $Creds
@@ -1826,6 +1834,378 @@ Function New-UxSipServerEntry {
 
 }
 
+Function New-UxCallRoutingEntry {
+    <#
+            .SYNOPSIS      
+             This cmdlet creates Call Routing Entries entries in existing Call Routing table
+             
+            .DESCRIPTION
+            This cmdlet creates Call Routing Entries entries in existing Call Routing table.You need to specify the Call Routing table where these Call Routing entries should be created.
+
+                        
+            .PARAMETER Parameter Name
+                Description
+
+            .PARAMETER ConfigIEState
+                Specifies the Administrative State of the resource.
+
+            .PARAMETER TransformationTable
+                Sets the Transformation table to use for this call route.
+
+            .PARAMETER RoutePriority
+                Priority of the route, 1 is the highest, 10 the lowest. Higher priority routes are matched against before lower priority routes regardless of the order of the routes in the table.
+
+            .PARAMETER CallPriority
+                Priority of the call. Used for emergency call identification by dial plan in routing table
+
+            .PARAMETER QualityMetricCalls
+                Specifies the number of calls over which the quality metrics are calculated.
+
+            .PARAMETER QualityMetricTime
+                Specifies the time in minutes after which a route is tried again after failing quality metrics.
+
+            .PARAMETER QualityMinASRThreshold
+                Specifies the minimum answer/seizure ratio for this rule to be considered for use.
+
+            .PARAMETER QualityMaxRoundTripDelayThreshold
+                Specifies the maximum average round trip (R/T) delay for this rule to be considered for use.
+
+            .PARAMETER QualityMaxJitterThreshold
+                Specifies the maximum average jitter for this rule to be considered for use.
+
+            .PARAMETER QualityMinLQMOSThreshold
+                Specifies the minimum average MOS (mean opinion score) value for this rule to be considered for use, in tenths (e.g.: "2.5" is configured as "25"). Setting this value to 0 disables the Minimum MOS threshold. Otherwise, the allowed values are between 10 and 50 (1.0 - 5.0).
+
+            .PARAMETER DestinationType
+                Specifies the type of destination for calls.
+
+            .PARAMETER DenyCauseCode
+                Specifies the cause code to use for Deny type destionations.
+
+            .PARAMETER MediaSelection
+                Specifies the Media List Profile to use for this Call Route.
+
+            .PARAMETER MediaMode
+                Determines Audio media mode for SIP calls. Note that when choosing Direct Mode, the valid Video/Application Stream Mode can only be Direct/Disabled.
+
+            .PARAMETER VideoMediaMode
+                Determines Video media mode for SIP calls. Note that when choosing Direct Mode, the valid Audio/Fax Stream Mode can only be Direct/Disabled.
+
+            .PARAMETER MediaTranscoding
+                Controls whether or not to use Media Transcoding. 
+                Transcoding requires a specific Transcoding License. Do not enable Media Transcoding unless your calling configuration requires it and the SBC Edge is licensed for the transcoding feature. If this option is enabled without a trancoding license, a Critical Alarm will be generated even if the calls being routed don't need to be transcoded.
+
+            .PARAMETER CancelOthersUponForwarding
+                Controls whether forked calls should clear when one of the forked calls is forwarded.
+
+            .PARAMETER CallForked
+                Controls whether to fork a call if this route is selected.
+
+            .PARAMETER ReRouteTable
+                Specifies which Cause Code Reroute Table to use. None means no cause code rerouting is used.
+
+            .PARAMETER MessageTranslationTable
+                Specifies which Message Translation Table to use. None means no message translation is used.
+
+            .PARAMETER SignalingGroupList
+                Specifies the Signaling Groups used as the destination of calls provided as a comma-separated string of the Signaling Group IDs. Not applicable when the Destination Type is Deny or Trunk Group.
+
+            .PARAMETER Description
+                Describes the Call Route Table Entry so that it is easily identifiable when re-sequencing Entries.
+
+            .PARAMETER MaximumCallDuration
+                Specifies the maximum duration that a call can stay connected in minutes. A zero value will disable this timer.
+
+            .PARAMETER TimeOfDay
+                Specifies which Time Of Day restrictions apply to this call route. None means there is no time of day restriction.
+
+
+
+            .EXAMPLE
+                get-uxtransformationtable    
+                
+                Assume you want to create a new transformation table.
+                First determine the ID of the transformation table in which you want to create the new transformation entry.
+                
+            .EXAMPLE                
+                new-uxtransformationentry -TransformationTableId 6 -InputFieldType 0 -InputFieldValue '^(2([45]\d{2}|6[0-5]\d))$' -OutputFieldType 0 -OutputFieldValue '+44123456\1' -Description "ExtToDDI"
+            
+                This example creates an Optional (default) transformation entry converting Called Number range  2400 - 2659  to Called Number +44123456XXXX
+                
+                
+            
+            .EXAMPLE
+                new-uxtransformationentry -TransformationTableId 3 -InputFieldType 3 -InputFieldValue '00(44\d(.*))' -OutputFieldType 3 -OutputFieldValue '+\1' -Description "UKCLIToE164"    
+            
+                This example creates an Optional transformation entry converting Calling Number beginning with 0044xxxxxx to Calling Number +44xxxxxx
+                
+                
+                
+            .EXAMPLE
+                new-uxtransformationentry -TransformationTableId 9 -InputFieldType 3 -InputFieldValue '(.*)' -OutputFieldType 3 -OutputFieldValue '\1' -Description "PassthroughCLI" -MatchType 0    
+            
+                This example creates a Mandatory CLI (Calling Number)passthrough
+                
+                
+            
+            .LINK
+                For Input/Output Field Value Code mappings, please refer to http://bit.ly/SBC-TransfomationCodes
+            
+            #>
+    [cmdletbinding(SupportsShouldProcess = $True, ConfirmImpact = "High")]
+    Param(
+        #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
+        #Else it will look for the last created session using the command above
+        [Parameter(Mandatory = $false, Position = 20)]
+        [PSCustomObject]$uxSession,
+        
+        # Sets the Transformation table to use for this call route.
+        [Parameter(Mandatory = $true, Position = 0)]
+        [validateRange(0, 65534)]
+        [int]$CallRoutingTable,
+
+        # Specifies the Administrative State of the resource.
+        [Parameter(Mandatory = $false, Position = 1)]
+        [Alias('Enabled')]
+        [validateRange(0, 1)]
+        [int]$ConfigIEState = 0,
+
+        # Sets the Transformation table to use for this call route.
+        [Parameter(Mandatory = $false, Position = 2)]
+        [validateRange(0, 65534)]
+        [int]$TransformationTable = 1,
+
+        # Priority of the route, 1 is the highest, 10 the lowest. Higher priority routes are matched against before lower priority routes regardless of the order of the routes in the table.
+        [Parameter(Mandatory = $false, Position = 3)]
+        [validateRange(1, 10)]
+        [int]$RoutePriority = 1,
+
+        # Priority of the call. Used for emergency call identification by dial plan in routing table
+        [Parameter(Mandatory = $false, Position = 4)]
+        [validateRange(0, 3)]
+        [int]$CallPriority = 1,
+
+        # Specifies the number of calls over which the quality metrics are calculated.
+        [Parameter(Mandatory = $false, Position = 5)]
+        [validateRange(1, 100)]
+        [int]$QualityMetricCalls = 10,
+
+        # Specifies the time in minutes after which a route is tried again after failing quality metrics.
+        [Parameter(Mandatory = $false, Position = 6)]
+        [validateRange(1, 60)]
+        [int]$QualityMetricTime = 10,
+
+        # Specifies the minimum answer/seizure ratio for this rule to be considered for use.
+        [Parameter(Mandatory = $false, Position = 7)]
+        [validateRange(0, 100)]
+        [int]$QualityMinASRThreshold = 0,
+
+        # Specifies the maximum average round trip (R/T) delay for this rule to be considered for use.
+        [Parameter(Mandatory = $false, Position = 8)]
+        [validateRange(0, 65535)]
+        [int]$QualityMaxRoundTripDelayThreshold = 65535,
+
+        # Specifies the maximum average jitter for this rule to be considered for use.
+        [Parameter(Mandatory = $false, Position = 9)]
+        [validateRange(0, 3000)]
+        [int]$QualityMaxJitterThreshold = 3000,
+
+        # Specifies the minimum average MOS (mean opinion score) value for this rule to be considered for use, in tenths (e.g.: "2.5" is configured as "25"). Setting this value to 0 disables the Minimum MOS threshold. Otherwise, the allowed values are between 10 and 50 (1.0 - 5.0).
+        [Parameter(Mandatory = $false, Position = 10)]
+        [validateRange(0, 50)]
+        [int]$QualityMinLQMOSThreshold = 0,
+
+        # Specifies the type of destination for calls.
+        [Parameter(Mandatory = $false, Position = 11)]
+        [validateRange(0, 3)]
+        [int]$DestinationType = 0,
+
+        # Specifies the cause code to use for Deny type destionations.
+        [Parameter(Mandatory = $false, Position = 12)]
+        [validateRange(0, 127)]
+        [int]$DenyCauseCode = 16,
+
+        # Specifies the Media List Profile to use for this Call Route.
+        [Parameter(Mandatory = $false, Position = 13)]
+        [validateRange(0, 65534)]
+        [int]$MediaSelection = 0,
+
+        # Determines Audio media mode for SIP calls. Note that when choosing Direct Mode, the valid Video/Application Stream Mode can only be Direct/Disabled.
+        [Parameter(Mandatory = $false, Position = 14)]
+        [validateRange(0, 5)]
+        [int]$MediaMode = 0,
+
+        # Determines Video media mode for SIP calls. Note that when choosing Direct Mode, the valid Audio/Fax Stream Mode can only be Direct/Disabled.
+        [Parameter(Mandatory = $false, Position = 15)]
+        [validateRange(0, 2)]
+        [int]$VideoMediaMode = 0,
+
+        # Controls whether or not to use Media Transcoding. 
+        [Parameter(Mandatory = $false, Position = 16)]
+        [validateRange(0, 1)]
+        [int]$MediaTranscoding = 0,
+
+        # Controls whether forked calls should clear when one of the forked calls is forwarded.
+        [Parameter(Mandatory = $false, Position = 17)]
+        [validateRange(0, 1)]
+        [int]$CancelOthersUponForwarding = 0,
+
+        # Controls whether to fork a call if this route is selected.
+        [Parameter(Mandatory = $false, Position = 18)]
+        [validateRange(0, 1)]
+        [int]$CallForked = 0,
+
+        # Specifies which Cause Code Reroute Table to use. None means no cause code rerouting is used.
+        [Parameter(Mandatory = $false, Position = 19)]
+        [validateRange(0, 65534)]
+        [int]$ReRouteTable = 0,
+
+        # Specifies which Message Translation Table to use. None means no message translation is used.
+        [Parameter(Mandatory = $false, Position = 20)]
+        [validateRange(0, 65534)]
+        [int]$MessageTranslationTable = 0,
+
+        # Specifies the Signaling Groups used as the destination of calls provided as a comma-separated string of the Signaling Group IDs. Not applicable when the Destination Type is Deny or Trunk Group.
+        [Parameter(Mandatory = $false, Position = 21)]
+        [validateRange(0, 40)]
+        [string]$SignalingGroupList = "1",
+
+        # Describes the Call Route Table Entry so that it is easily identifiable when re-sequencing Entries.
+        [Parameter(Mandatory = $false, Position = 22)]
+        [ValidateLength(0, 64)]
+        [String]$Description,
+
+        # Specifies the maximum duration that a call can stay connected in minutes. A zero value will disable this timer.
+        [Parameter(Mandatory = $false, Position = 23)]
+        [validateRange(0, 10080)]
+        [int]$MaximumCallDuration = 0,
+
+        # Specifies which Time Of Day restrictions apply to this call route. None means there is no time of day restriction.
+        [Parameter(Mandatory = $false, Position = 24)]
+        [validateRange(0, 65534)]
+        [int]$TimeOfDay = 0
+                
+    )
+    # First thing we need to do is get a new EntryId for the entry
+    # DEPENDENCY ON get-uxtransformationentry FUNCTION TO GET THE NEXT AVAILABLE TRANSFORMATIONTABLEID
+    try {
+        if ($uxSession) {
+            [int]$NewUxCallRoutingEntry = (Get-UxCallRoutingEntry -CallRoutingTableId $CallRoutingTable -uxSession $uxSession -verbose:$false | Select-Object -ExpandProperty id | ForEach-Object { $_.split(":")[1] } | Measure-Object -Maximum).Maximum + 1 
+        }
+        else {
+            [int]$NewUxCallRoutingEntry = (Get-UxCallRoutingEntry -CallRoutingTableId $CallRoutingTable -verbose:$false | Select-Object -ExpandProperty id | ForEach-Object { $_.split(":")[1] } | Measure-Object -Maximum).Maximum + 1 
+        }
+    }
+    catch {
+        Throw "Command failed when trying to execute the UxCallRoutingEntry using `"get-UxCallRoutingEntry`" cmdlet.The error is $_"
+    }
+
+    $NewPSObject = [PSCustomObject]@{
+        PSTypeName = 'SBC.Object'
+    }
+
+      
+    Write-Verbose "Adding as table number $NewUxCallRoutingEntry"
+
+    $parametersList = $($MyInvocation.MyCommand.Parameters.Keys)[1..25]
+    # We limit the keys to exclude uxSession and the standard advanved cmdlets parameters with [1..25]
+    foreach ($parameter in $parametersList ) {
+        $Value = (Get-Variable $parameter -ea SilentlyContinue).value
+        $NewPSObject | Add-Member -MemberType NoteProperty -Name $parameter -Value $Value
+    }
+    
+    $ReturnTransformationTable = Get-UxTransformationTable -Verbose:$false | Where-Object { $_.id -eq $NewPSObject.TransformationTable }
+    Write-verbose "Using Transformation Table $($ReturnTransformationTable.Description)"
+
+    $ReturnReRoutingTable = Get-UxReRouteTable -Verbose:$false | Where-Object { $_.id -eq $NewPSObject.ReRouteTable }
+    Write-verbose "Using ReRouting Table $($ReturnReRoutingTable.Description)"
+
+
+
+    $SignalingGroups = Get-UxSignalGroup -Verbose:$false
+    $SipSignalIDList = $SignalingGroupList.split(",")
+    $i = 1
+    ForEach ($SignalID in $SipSignalIDList ) {
+        $ReturnSignalingTable = $SignalingGroups | Where-Object { $_.id -eq $SignalID }
+        Write-verbose "Using Signaling Groups in order [$i] $($ReturnSignalingTable.Description)"
+        $i ++
+    }
+
+    # Now We have built the object We need to get it into html format
+    $Arguments = (New-UxURLandPSObject $NewPSObject).htmlstr
+
+    $ResourceSplat = @{
+        resource      = "routingtable/$CallRoutingTable/routingentry"
+        index         = $NewUxCallRoutingEntry
+        ReturnElement = "routingentry_list"
+        Arguments     = $Arguments
+    }
+    if ($uxSession) { $ResourceSplat.uxSession = $uxSession }
+
+
+    Write-Verbose "Submitting Data"
+    Write-verbose "Returning the updated table"
+    $msg = "Adding A New Entry to Transformation Table on the Gateway with ID $NewUxCallRoutingEntry"
+    if ($PSCmdlet.ShouldProcess($($msg))) {
+        $Return = new-uxresource @ResourceSplat -WhatIf:$PSBoundParameters.ContainsKey('WhatIf') -Confirm:$false      
+    }
+    Write-Output $return.routingtable_list
+
+
+}
+
+
+Function Get-uxTableToParameter {
+    <#
+    .SYNOPSIS      
+        A small helper function which parses the Ribbon Wiki to create a list of parameters
+        
+    .DESCRIPTION
+        Creating a parameter list is a pain in the ass, so i created a small function that will query the wiki and copy a parameter list to the clip board
+        Just pass the wiki page you want it to create a parameter list from
+
+
+        
+    #>        
+    [cmdletbinding(SupportsShouldProcess = $True, ConfirmImpact = "High")]
+    Param(
+        # Pass the page of the SBC wiki entry - We make the assumption that it is the second table
+        [Parameter(Mandatory = $false, Position = 0)]
+        [string]$Page = "https://support.sonus.net/display/UXAPIDOC/Resource+-+routingentry",
+        [Parameter(Mandatory = $false, Position = 0)]
+        [switch]$helpsection
+    )
+    # $ParsedPage = Invoke-WebRequest "https://support.sonus.net/display/UXAPIDOC/Resource+-+routingentry"
+    $ParsedPage = Invoke-WebRequest $page
+    $Table = $ParsedPage.ParsedHtml.getElementsByTagName('TABLE')[1]
+    $count = -1;
+    $Table.rows | ForEach-Object {
+        $count = $count + 1
+        if (-not $helpsection) {
+            Write-Output ""
+            Write-output "`# $($_.cells[6].innertext.trim())"
+            Write-output "[Parameter(Mandatory=`$false,Position=$count)]"
+            Write-output "[validateRange(0,100)]"
+            $type = $_.cells[3].innertext.trim()
+            if ($type -eq "enum") { $type = "int" }
+            $str = "[{2}]`${0} = {1}," -f $_.cells[0].innertext.trim(), $_.cells[4].innertext.trim(), $type
+            Write-output $str
+        }
+        else {
+            Write-Output ""
+            Write-output ".PARAMETER $($_.cells[0].innertext.trim())"
+            Write-output "    $($_.cells[6].innertext.trim())"
+        }
+
+        
+    }
+    
+    
+        
+        
+}
+
+
 Function New-UxCallRoutingTable {
     <#
 	.SYNOPSIS      
@@ -1954,6 +2334,72 @@ Function Get-UxCallRoutingTable {
  
 }
 
+Function Get-UxReRouteTable {
+    <#
+	.SYNOPSIS      
+	 This cmdlet displays all the sipprofile names and ID's
+
+    .EXAMPLE
+	 get-UxSipProfile
+	   
+    .EXAMPLE
+    $Creds = Get-credential
+	$Obj = connect-uxgateway -uxhostname lyncsbc01.COMPANY.co.uk -Credentials $Creds
+	get-UxSipProfile -uxSession $Obj
+
+	#>
+    
+    [cmdletbinding()]
+    Param(
+        #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
+        #Else it will look for the last created session using the command above
+        [Parameter(Mandatory = $false, Position = 1)]
+        [PSCustomObject]$uxSession,
+        #If you want to filter send a profile id.
+        [Parameter(Mandatory = $false, Position = 0)]
+        [int]$ReRoutingTableId
+        
+    )
+    Write-verbose "Called $($MyInvocation.MyCommand)"
+    #$resource = Get-UxResourceName -functionname $MyInvocation.MyCommand
+    
+    $ResourceSplat = @{
+        resource      = "reroutetable"
+        ReturnElement = "reroutetable_list"
+        detail        = $true        
+    }
+    if ($uxSession) { $ResourceSplat.uxSession = $uxSession }
+    $TopLevel = (get-uxresource @ResourceSplat).reroutetable
+
+    if ($ReRoutingTableId) {
+        $ResourceSplat = @{
+            resource      = "reroutetable/$CallRoutingTableId"
+            ReturnElement = "reroutetable_list"
+            detail        = $true
+        }
+        if ($uxSession) { $ResourceSplat.uxSession = $uxSession }    
+        $SubLevel = (get-uxresource @ResourceSplat).reroutetable
+
+        $Seq = $TopLevel | Where-Object { $_.id -eq $CallRoutingTableId } | Select-Object -ExpandProperty Sequence
+        $OrderedList = Get-UxOrderedList -Sequence $Seq -List $SubLevel
+    
+
+        # Lets Build a Temp object where we can store the top level then the entires.
+        #$TempReturn = [PSCustomObject]@{
+        #    Table   = $TopLevel | Where-Object { $_.id -eq $CallRoutingTableId }
+        #    Entries = $OrderedList
+        #}
+        
+        
+        # Lets Finally Build the Return Object 
+        return $OrderedList
+    }
+    else {
+        return $TopLevel
+    }
+ 
+}
+
 
 Function Get-UxCallRoutingEntry {
     <#
@@ -2003,6 +2449,8 @@ Function Get-UxCallRoutingEntry {
     Write-Output $return.routingentry
     
 }
+
+
 
 
 
