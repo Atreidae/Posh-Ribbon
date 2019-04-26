@@ -16,6 +16,7 @@ Adding additional "Get Modules" SHOULD be relatively simple. Just take a look at
 ## Version History
 
 Version 2 is a rewrite and a more modular design By Chris Burns from GCIcom. http://www.posh.dev
+
 Version 1 was written by Vikas Jaswal. http://www.allthingsuc.co.uk/about-me/
 
 	Version 2.1.1.2 26/04/19    -  Updated Ready For Powershell Gallery - Chris Burns
@@ -32,14 +33,6 @@ Version 1 was written by Vikas Jaswal. http://www.allthingsuc.co.uk/about-me/
     Version 1.1     03/12/13    - Added new-ux*, restart-ux*, and get-uxresource cmdlets - Vikas Jaswal
     Version 1.0     30/11/13    - Module Created - Vikas Jaswal
 
-
-
-Seeing the number of people using this Powershell module and making update on their own, I asked Vikas the authorization to post this code on Github to start a collaboration.
-
-
-Everyone is free to collaborate on this project or request new feature.
-
-PS: Thanks again Vikas Jaswal for starting this module.
 
 ## Key Features
 
