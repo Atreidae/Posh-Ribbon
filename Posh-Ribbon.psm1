@@ -72,9 +72,6 @@ Function Connect-UxGateway {
 	$Creds = Get-credential
     $Session1 = connect-uxgateway -uxhostname lyncsbc01.COMPANY.co.uk -Credentials $Creds
     $Session2 = connect-uxgateway -uxhostname lyncsbc02.COMPANY.co.uk -Credentials $Creds
-
-	.OUTPUT
-	The cmdlet will return a uxSession variable which can be stored and used with multiple cmdlets. - This object includes the name, websession and credentials.
 	
 	#>
     [cmdletbinding()]
