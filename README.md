@@ -1,4 +1,5 @@
-# RibbonSBCEdge Powershell Module
+# Posh-Ribbon Powershell Module
+Previously known as RibbonSBCEdge
 This project is a Powershell module that allow to control Ribbon SBC Edge with REST API.
 
 **This project is completely independent from Ribbon Communication. Ribbon is not responsible for any issue with this module. If you have issue with Ribbon product contact the Ribbon support.**
@@ -16,6 +17,7 @@ Adding additional "Get Modules" SHOULD be relatively simple. Just take a look at
 Version 2 is a rewrite and a more modular design By Chris Burns from GCIcom. http://www.posh.dev
 Version 1 was written by Vikas Jaswal. http://www.allthingsuc.co.uk/about-me/
 
+	Version 2.1.1.2 26/04/19    -  Updated Ready For Powershell Gallery - Chris Burns
     Version 2.1     25/04/19    -  Updated with some more Get and New Commands especially Call Routing Table - Chris Burns
     Version 2.0     15/04/19    -  *NEW Version* - Rewrite for modern module design, better use of [XML] accelerator and details switch,
                                     a new custom uxSession Object to allow for access to multiple SBC's at once and a Custom XML -> PSObject Parser - Chris Burns
@@ -59,7 +61,7 @@ PS: Thanks again Vikas Jaswal for starting this module.
 
 ## Getting Started
 
-1. Will be submitted to PowerShell Gallery and eventually can be installed with Install-Module RibbonSBCEdge
+1. Will be submitted to PowerShell Gallery and eventually can be installed with Install-Module Posh-Ribbon
 
 #### DEV's
 
