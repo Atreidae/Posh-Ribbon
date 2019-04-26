@@ -20,7 +20,7 @@
         
 		
 		Version History:
-        Version 2.0.1 - 25/04/19 - Updated with some more Get and New Commands especially Call Routing Table - Chris Burns
+        Version 2.1 - 25/04/19 - Updated with some more Get and New Commands especially Call Routing Table - Chris Burns
         Version 2.0 - 15/04/19 - *NEW Version* - Rewrite for modern module design, better use of [XML] accelerator and details switch,
                                  a new custom uxSession Object to allow for access to multiple SBC's at once and a Custom XML -> PSObject Parser - Chris Burns
         
@@ -445,7 +445,7 @@ Function Get-UxResource {
     Write-verbose "Connecting to $url"
 	
     Try {
-        $uxrawdata = Invoke-RestMethod -Uri $url -Method GET -WebSession $($uxSession.Session) -ErrorAction Stop
+        $uxrawdata = Invoke-RestMethod -Uri $url -Method GET -WebSession $($uxSession.Session)
     }
 	
     Catch {
@@ -453,10 +453,17 @@ Function Get-UxResource {
             if ($uxSession.DefaultSessionType) {
                 Write-Warning "Session Expired - Trying to renew session to $($uxSession.host)"
                 Connect-UxGateway -uxhostname $DefaultSession.host -Credentials $DefaultSession.Credentials
+                $uxrawdata = Invoke-RestMethod -Uri $url -Method GET -WebSession $($uxSession.Session) -ErrorAction Stop
             }
         }
         catch {
-            throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity)."
+            #Write-Verbose $uxrawdata   
+            if ($_.Exception -like "*(404) Not Found*") {
+                Throw "404 Returned - Unable to find Resource Are you requesting a valid resource?" 
+            }
+            else {
+                throw "$_"
+            }
         }    
     }
 
@@ -486,7 +493,7 @@ Function Get-UxResource {
     #Check if connection was successful.HTTP code 200 is returned
     If ( $Success -ne "200") {
         #Unable to Login
-        throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_"
+        throw "Error Code $Success : Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_"
     }
     
     # Return data and raw data in the verbose stream if needed.
@@ -1059,7 +1066,7 @@ Function Copy-UxTransformationTables {
     }
     Write-verbose "Both Sessions Appear to be ok, continuing"
     if ($TableID) {
-        $SourceTransformationTable = Get-UxTransformationTable -uxSession $SourceSession -Verbose:$false | Where { $_.id -eq $TableID }
+        $SourceTransformationTable = Get-UxTransformationTable -uxSession $SourceSession -Verbose:$false | Where-object { $_.id -eq $TableID }
         Write-Verbose "Getting $($SourceTransformationTable.description) Only"
     }
     Else { 
@@ -1158,7 +1165,7 @@ Function Copy-UxTransformationTables {
                 catch {
                     Write-Error "Failed to Add : $HTMLFormated"  
                 } 
-                #Write-verbose $EntryReturn
+                Write-verbose $EntryReturn
             }
 
         }
@@ -1166,7 +1173,7 @@ Function Copy-UxTransformationTables {
 
 }
 
-
+<#
 Function Copy-UxTransformationEntry {
     <#
 	.SYNOPSIS      
@@ -1182,7 +1189,7 @@ Function Copy-UxTransformationEntry {
 	Copy-UxTransformationTables -SourceSession $SourceGateWay -DestinationSession $DestinationGateway
     
     
-    #>
+    
     [cmdletbinding(SupportsShouldProcess = $True, ConfirmImpact = "High")]
     Param(
         #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
@@ -1203,6 +1210,7 @@ Function Copy-UxTransformationEntry {
         [switch]$Enabled
     )
 }
+#>
 
 
 
@@ -2768,6 +2776,9 @@ Function New-UxSignalGroup {
 	#>
     [cmdletbinding(SupportsShouldProcess = $True, ConfirmImpact = "High")]
     Param(
+        [Parameter(Mandatory = $false, Position = 20)]
+        [PSCustomObject]$uxSession,
+
         [Parameter(Mandatory = $true, Position = 0, HelpMessage = 'Short description/name of the SG')]
         [ValidateLength(1, 64)]
         [string]$Description ,
@@ -2852,7 +2863,7 @@ Function New-UxSignalGroup {
     $ICESupport = 0
     $ICEMode = 0
     $InboundNATTraversalDetection = 0
-
+    <#
     #Default for non required parameters
     $ServerSelection = 0
     $RelOnQckConnectTimer = 1000
@@ -2873,7 +2884,7 @@ Function New-UxSignalGroup {
     $NonceLifetime = 600
     $Monitor = 2
     $AuthorizationRealm = ""
-
+#>
 
 
     #Signalling ID Parameters
@@ -2943,19 +2954,9 @@ Function Restart-UxGateway {
         #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
         #Else it will look for the last created session using the command above
         [Parameter(Mandatory = $false, Position = 0)]
-        [PSCustomObject]$uxSession
+        [PSCustomObject]$uxSession = $DefaultSession
     )
-    if ($uxSession) {
-        $uxSessionObj = $uxSession
-        $uxHost = $uxSession.host
-        $SessionVar = $uxSession.Session
-    }
-    else {
-        $uxSessionObj = $DefaultSession
-        $uxHost = $DefaultSession.host
-        $SessionVar = $DefaultSession.session
-    }
-
+  
     $Status = Send-UxCommand -uxSession $uxSessionObj -Command reboot -ReturnElement status
     If ($status.http_code -eq "200") {
         Write-Output "Reboot initiated and completed succesfully" 
