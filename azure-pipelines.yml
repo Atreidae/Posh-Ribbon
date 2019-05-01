@@ -10,6 +10,7 @@ steps:
   displayName: 'Version PowerShell Modules'
   inputs:
     VersionRegex: '\d+\.\d+\.\d+\'
+    VersionNumber: $(GitVersion.MajorMinorPatch)
 
 - task: richardfennellBM.BM-VSTS-PesterRunner-Task.Pester-Task.Pester@8
   displayName: 'Pester Test Runner'
