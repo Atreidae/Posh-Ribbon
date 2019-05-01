@@ -18,6 +18,8 @@ steps:
     CodeCoverageOutputFile: '$(System.DefaultWorkingDirectory)\Coverage-Pester.XML'
     CodeCoverageFolder: '$(System.DefaultWorkingDirectory)'
     scriptFolder: "@{Path='$(System.DefaultWorkingDirectory)'; Parameters=@{uxhostname='$(SBCAddress)'; SBCuserName='$(SBCuser)'; SBCPassword='$(SBCpass)'}}"
+    steps:
+  condition: succeededOrFailed()
 
 - task: PublishTestResults@2
   displayName: 'Publish Test Results'
