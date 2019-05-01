@@ -28,8 +28,11 @@ steps:
   inputs:
     SourceFolder: '$(System.DefaultWorkingDirectory)'
     Contents: |
-     **
-     !.git*
+     **\*.psd1
+     **\*.psm1
+     **\*.md
+     **\LICENSE
+     **\Tests\*
     TargetFolder: '$(Build.ArtifactStagingDirectory)'
 
 - task: PublishBuildArtifacts@1
