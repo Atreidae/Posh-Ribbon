@@ -667,9 +667,14 @@ Function Send-UxCommand {
     #   Throw "Session Expired or problem connecting to Box - Rerun Connect-uxGateway"
     #}
     #endregion
-
-    # The Command MUST be in lowercase so converting
-    $url = "https://$($uxSession.host)/rest/system?action=$($command.ToLower())"
+    if ($Command -eq "refreshadcache") {
+        $url = "https://$($uxSession.host)/rest/adconfig/?action=$Command"     
+    }
+    else {
+        # The Command MUST be in lowercase so converting
+        $url = "https://$($uxSession.host)/rest/system?action=$($command.ToLower())"     
+    }
+   
     Write-verbose "Connecting to $url"
     Write-verbose "Adding: $Arguments"
     

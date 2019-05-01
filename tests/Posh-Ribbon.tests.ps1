@@ -14,7 +14,7 @@ Param(
 )
 
 
-if(-not $credential ){
+if (-not $credential ) {
     $secpasswd = ConvertTo-SecureString $SBCPassword -AsPlainText -Force
     $Credential = New-Object System.Management.Automation.PSCredential ($SBCuserName, $secpasswd)
 }
@@ -22,8 +22,8 @@ if(-not $credential ){
 $ProjectRoot = Resolve-Path "$PSScriptRoot\.."
 $ModuleRoot = Split-Path (Resolve-Path "$ProjectRoot\*.psd1")
 $ModuleName = Split-Path $ModuleRoot -Leaf
-$ModulePsd = (Resolve-Path "$ProjectRoot\$ModuleName.psd1").Path
-$ModulePsm = (Resolve-Path "$ProjectRoot\$ModuleName.psm1").Path
+$ModulePsd = (Resolve-Path "$ProjectRoot\Posh-Ribbon.psd1").Path
+$ModulePsm = (Resolve-Path "$ProjectRoot\Posh-Ribbon.psm1").Path
 #$DefaultsFile = Join-Path $ProjectRoot "Tests\$($ModuleName).Pester.Defaults.json"
 
 $ModuleLoaded = Get-Module $ModuleName
@@ -36,6 +36,14 @@ ElseIf ($null -ne $ModuleLoaded -and $ModuleLoaded -ne $ModulePSM) {
 }
 
 Describe "Connection" {
+    Context "When Logging In with wrong hostname " {
+        it 'uxSession return object should throw an error' {
+            { connect-uxgateway -uxhostname "kkk.no.local" -credentials $Credential -ea stop } | should throw
+        }
+      
+    }
+    
+    
     $1stSession = connect-uxgateway -uxhostname $uxhostname -credentials $Credential
             
     Context "When Logging In with Actual Credentials" {
@@ -50,12 +58,7 @@ Describe "Connection" {
         }
     }
     
-    Context "When Logging In with wrong hostname " {
-        it 'uxSession return object should throw an error' {
-            { connect-uxgateway -uxhostname "kkk.no.local" -credentials $Credential -ea stop } | should throw
-        }
-      
-    }
+    
     Context "When Logging In with wrong credentials " {
         $secpasswd = ConvertTo-SecureString "PlainTextPassword" -AsPlainText -Force
         $mycreds = New-Object System.Management.Automation.PSCredential ("username", $secpasswd)
