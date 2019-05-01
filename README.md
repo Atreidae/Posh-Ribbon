@@ -13,13 +13,20 @@ easier now as they rely on a single "engine" to do the heavy lifting.
 
 Adding additional "Get Modules" SHOULD be relatively simple. Just take a look at the existing cmdlets.
 
+New: Ribbon SBC In Azure.
+
+Ribbon SBC have now provided a virtual machine that you can test these scripts upon. Indeed, the Author uses a Azure VM as
+part of their DevOps Release Pipleine. For further information :-
+https://support.sonus.net/display/UXDOC80/SBC+SWe+Lite+Trial+Offer+for+Microsoft+Azure
+
+
 ## Version History
 
 Version 2 is a rewrite and a more modular design By Chris Burns from GCIcom. http://www.posh.dev
 
-Version 1 was written by Vikas Jaswal. http://www.allthingsuc.co.uk/about-me/
+Version 1 ( Now considered Legacy Code ) was written by Vikas Jaswal. http://www.allthingsuc.co.uk/about-me/
 
-	Version 2.1.1.2 26/04/19    -  Updated Ready For Powershell Gallery - Chris Burns
+	Version 2.1     26/04/19    -  Updated Ready For Powershell Gallery - Chris Burns
     Version 2.1     25/04/19    -  Updated with some more Get and New Commands especially Call Routing Table - Chris Burns
     Version 2.0     15/04/19    -  *NEW Version* - Rewrite for modern module design, better use of [XML] accelerator and details switch,
                                     a new custom uxSession Object to allow for access to multiple SBC's at once and a Custom XML -> PSObject Parser - Chris Burns

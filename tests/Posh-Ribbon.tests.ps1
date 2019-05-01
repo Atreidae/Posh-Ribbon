@@ -287,3 +287,99 @@ Describe "Getting Information Back from Get Cmdlets" {
 
 
 }
+Describe "Creating New Sip Server Tables and Entires" {
+    
+    # Lets setup some variables that we can use to keep track of the new entries.
+    $testTableName1 = -join ((65..90) + (97..122) | Get-Random -Count 5 | % { [char]$_ })
+    $testTableName2 = -join ((65..90) + (97..122) | Get-Random -Count 5 | % { [char]$_ })
+    $testTableName3 = -join ((65..90) + (97..122) | Get-Random -Count 5 | % { [char]$_ })
+    $TableDescription1 = "[!PSTR#] Test For {0}" -f $testTableName1
+    $TableDescription2 = "[!PSTR#] Test For {0}" -f $testTableName2
+    $TableDescription3 = "[!PSTR#] Test For {0}" -f $testTableName3
+    $idTracker = 0
+
+    Context "Creating A New SIP Server Table `'New-UXSipServerTable`' and it's Entries" {
+       
+        
+        it "Should Not Throw an Error when creating & Deleting a table" {
+            # We create this indivdual object just for testing for errors
+            { 
+                $return = New-UxSipServerTable -Description $TableDescription1 -confirm:$false -ea stop
+                Remove-UxResource -resource "sipservertable/$($return.id)" -confirm:$false -ea stop
+                
+            } | Should -Not -Throw
+
+        }
+        
+        
+
+        $returnObj = New-UxSipServerTable -Description $TableDescription2 -confirm:$false
+
+        it "Should return a table with the same description" {
+            $ReturnObj.Description -eq $TableDescription2 | Should -Be $true
+        }
+
+        it "Should return a table with an ID." {
+            $ReturnObj.id | Should -not -Be $null
+        }
+
+        # Cleaning UP
+        it "Should delete a table with an ID." {
+            { Remove-UxResource -resource "sipservertable/$($ReturnObj.id)" -confirm:$false -ea stop } | Should -not -Throw
+        }
+        
+        
+
+    }
+    
+    Context "Creating an Entry in A Generated Table" {
+        # Lets Create a blank table to add Entries to.
+        $returnObj = New-UxSipServerTable -Description $TableDescription3 -confirm:$false
+        # Lets Set Some Common Parameters
+        $ParamsToSend = @{
+            ServerLookup                     = 0
+            ServerType                       = 0
+            Weight                           = 0
+            Host                             = "192.168.1.100"
+            HostIpVersion                    = 0
+            DomainName                       = "Domain.com"
+            ServiceName                      = "sip"
+            Port                             = 5060
+            TransportSocket                  = 4
+            ReuseTransport                   = 1
+            ReuseTimeout                     = 0
+            Protocol                         = 2
+            Monitor                          = 1
+            KeepAliveFrequency               = 30
+            RecoverFrequency                 = 5
+            LocalUserName                    = 'Anonymous'
+            PeerUserName                     = 'Anonymous'
+            Priority                         = 0
+            RemoteAuthorizationTableID       = 0
+            ContactRegistrantTableID         = 0
+            StaggerRegistration              = 0
+            ClearRemoteRegistrationOnStartup = 0
+            SessionURIValidation             = 0
+            ContactURIRandomizer             = 0
+            RetryNonStaleNonce               = 1
+            TLSProfileID                     = 0
+            AuthorizationOnRefresh           = 1
+        }
+    
+        It "Should create a new entry in the the new table" {
+            { New-UxSipServerEntry @ParamsToSend -SipServerTableId $ReturnObj.id -confirm:$false -ea stop } | Should -Not -Throw
+        } 
+
+        # Cleaning UP
+        it "Should delete a entry with an ID of 1 in the Dynamically created table." {
+            # We are deleting the first one as there should only ever be on in this dynamic entry
+            { Remove-UxResource -resource "sipservertable/$($ReturnObj.id)/sipserver/1" -confirm:$false -ea stop } | Should -not -Throw
+        }
+
+        # Cleaning UP table
+        it "Should delete a table after the entry has been deleted." {
+            { Remove-UxResource -resource "sipservertable/$($ReturnObj.id)" -confirm:$false -ea stop } | Should -not -Throw
+        }
+    }
+
+}

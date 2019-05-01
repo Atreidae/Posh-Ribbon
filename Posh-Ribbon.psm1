@@ -1621,7 +1621,7 @@ Function New-UxSipServerTable {
     if ($PSCmdlet.ShouldProcess($($msg))) {
         $Return = new-uxresource @ResourceSplat -WhatIf:$PSBoundParameters.ContainsKey('WhatIf') -Confirm:$false      
     }
-    Write-Output $return.transformationtable
+    Write-Output $return
 
 }
 
@@ -1703,106 +1703,165 @@ Function New-UxSipServerEntry {
     Param(
         #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
         #Else it will look for the last created session using the command above
-        [Parameter(Mandatory = $false, Position = 0)]
+        [Parameter(Mandatory = $false, Position = 28)]
         [PSCustomObject]$uxSession,
 
-        [Parameter(Mandatory = $true, Position = 1)]
+        # Table ID to add entry
+        [Parameter(Mandatory = $true, Position = 0)]
         [int]$SipServerTableId,
 
-        [Parameter(Mandatory = $false, Position = 2, HelpMessage = "Specifies the protocol to use for sending SIP messages")]
-        [ValidateSet(0, 1)]
-        [int]$ServerLookup = 0,
-		
-        [Parameter(Mandatory = $true, Position = 3, HelpMessage = "Specifies the priority of this server")]
-        [ValidateRange(0, 16)]
-        [int]$Priority,
 
-        [Alias("ComputerName", "Server", "FQDN")]
-        [Parameter(Mandatory = $true, Position = 4, HelpMessage = "Specifies the IP address or FQDN where this Signaling Group sends SIP messages")]
-        [ValidateLength(1, 256)]
+        # Specifies the method to use to lookup SIP servers IP/FQDN 
+        [Parameter(Mandatory = $false, Position = 1)]
+        [validateSet(0, 1)]
+        [int]$ServerLookup = 0,
+
+        # Specifies the method to use to lookup SIP servers eConventionalSrvr 
+        [Parameter(Mandatory = $false, Position = 2)]
+        [validateSet(0, 1, 2)]
+        [int]$ServerType = 0,
+
+        # Specifies the weight of the server in case it's defined in the SRV record.
+        [Parameter(Mandatory = $false, Position = 3)]
+        [validateRange(0, 65535)]
+        [int]$Weight = 0,
+
+        # Specifies the IP address or FQDN where this Signaling Group sends SIP messages. If an FQDN is configured all the associated servers are included and used according to the server selection configuration element.
+        [Alias("ComputerName", "Server", "FQDN", "Host")]
+        [Parameter(Mandatory = $true, Position = 4)]
+        [validateLength(0, 256)]
         [string]$Hostname,
 
-        [Parameter(Mandatory = $false, Position = 5, HelpMessage = "Specifies IPv4 addresses or IPv6 addresses")]
+        # Specifies whether the FQDN should be resolved into IPv4 addresses or IPv6 addresses. If this is a SRV record, this field specifies whether the resulting FQDNs are resolved into IPv4 or IPv6 addresses. By default, the SBC Edge resolves the FQDN into IPv4 addresses.
+        [Parameter(Mandatory = $false, Position = 5)]
+        [validateSet(0, 1)]
         [int]$HostIpVersion = 0,
 
-        [Parameter(Mandatory = $false, Position = 6, HelpMessage = "Specifies the port number to send SIP messages")]
-        [ValidateRange(1024, 65535)]
-        [string]$Port = 5061,
+        # Specifies the Domain where this Signaling Group sends SRV queries.
+        [Parameter(Mandatory = $false, Position = 6)]
+        [validateLength(0, 256)]
+        [string]$DomainName = "",
 
-        [Parameter(Mandatory = $false, Position = 7, HelpMessage = "Specifies the protocol to use for sending SIP messages")]
-        [ValidateRange(0, 9)]
-        [string]$Protocol = 2,
-		
-        [Parameter(Mandatory = $false, Position = 8, HelpMessage = "Specifies the TLS Profile ID")]
-        [ValidateRange(0, 9)]
-        [string]$TLSProfileid,
-		
-        [Parameter(Mandatory = $false, Position = 9, HelpMessage = "Specifies the method to monitor server. None(0), SIP Options(1)")]
-        [ValidateSet(0, 1)]
+        # The name of the service to be placed in the SRV request.
+        [Parameter(Mandatory = $false, Position = 7)]
+        [validateLength(0, 64)]
+        [string]$ServiceName = "sip",
+
+        # Specifies the port number to send SIP messages.
+        [Parameter(Mandatory = $false, Position = 8)]
+        [validateRange(1024, 65535)]
+        [int]$Port = 5060,
+
+        # Specifies number of re-usable sockets 
+        # This option is available when ReuseTransport is set to True. When ReuseTransport is false, this needs to be set to 0
+        [Parameter(Mandatory = $false, Position = 9)]
+        [validateRange(0, 4)]
+        [int]$TransportSocket = 0,
+
+        # Specifies whether sockets will be reused or shared. Only valid for TCP or TLS
+        [Parameter(Mandatory = $false, Position = 10)]
+        [validateSet(0, 1)]
+        [int]$ReuseTransport = 1,
+
+        # Specifies the number of minutes that a socket remains connected to the server. 
+        # This option is available when ReuseTransport is Enabled. A value of 0 means ReuseTimeout is set Forever*. Otherwise, the valid range is 5-1440
+        [Parameter(Mandatory = $false, Position = 11)]
+        [validateRange(0, 1440)]
+        [int]$ReuseTimeout = 1000,
+
+        # Specifies the protocol to use for sending SIP messages UDP 
+        #- Send messages using UDP. 
+        #TCP 
+        #- Send message using TCP. 
+        #TLS 
+        #- Send message using TLS.
+        [Parameter(Mandatory = $true, Position = 12)]
+        [validateRange(0, 9)]
+        [int]$Protocol = 1,
+
+        # Specifies the method to monitor server None 
+        #- no monitoring of this server occurs 
+        #SIP options 
+        #- an Options message is sent to the server
+        [Parameter(Mandatory = $false, Position = 13)]
+        [validateSet(0, 1, 2)]
         [int]$Monitor = 1,
-        
-        [Parameter(Mandatory = $False, Position = 10)]
-        [ValidateSet(0, 1)]
-        [int]$ReuseTimeout = 0,
 
+        # Specify frequency in seconds to determine server availability. 
+        # This configuration is available when Monitor is set to SIP Options . If Monitor is not set to SIP Options, this value needs to be 0. Otherwise, this value needs to be in the range 30-300*
+        [Parameter(Mandatory = $false, Position = 14)]
+        [validateRange(0, 300)]
+        [int]$KeepAliveFrequency = 30,
+
+        # Specify frequency in seconds to check server to determine whether it has become available. 
+        # This configuration is available when Monitor is set to SIP Options . If Monitor is not set to SIP Options, this value needs to be 0. Otherwise, this value needs to be in the range 5-300*
+        [Parameter(Mandatory = $false, Position = 15)]
+        [validateRange(0, 300)]
+        [int]$RecoverFrequency = 5,
+
+        # The local username of the SBC Edge system. 
+        # This configuration is available when Monitor is set to SIP Options
+        [Parameter(Mandatory = $false, Position = 16)]
+        [validateLength(0, 64)]
+        [string]$LocalUserName = "Anonymous",
+
+        # The username of SIP server. 
+        # This configuration is available when Monitor is set to SIP Options
+        [Parameter(Mandatory = $false, Position = 17)]
+        [validateLength(0, 64)]
+        [string]$PeerUserName = "Anonymous",
+
+        # Specifies the priority of this server. The priority is used to order the server when more than 1 is configured.
+        [Parameter(Mandatory = $true, Position = 18)]
+        [validateRange(0, 16)]
+        [int]$Priority = 0,
+
+        # Specifies a Remote Authorization table for this SIP Server, from a list of authorization tables defined in the Remote Authorization Tables. The Remote Authorization table is used by a Signaling group when a challenge (401/407) is issued by the server. The table contains a realm, user name, and password. There are used to provide credentials to he server issuing the challenge.
         [Parameter(Mandatory = $false, Position = 19)]
-        [ValidateSet(1, 4)]
-        [string]$TransportSocket = 4
+        [validateRange(0, 65535)]
+        [int]$RemoteAuthorizationTableID = 0,
 
-        <#		[Parameter(Mandatory=$false,Position=9)]
-		[ValidateRange(0,2)]
-		[int]$ServerType = 0,
+        # Specifies a Contact Registration Table for this SIP Server,from a list of registration tables defined in the Contact Registrant Tables. The Contact Registration is used by a Signaling Group to register one or more contacts to a registrar. The contact information contains the SIP address of record and the methods which can be used to establish sessions to this Signaling group.
+        [Parameter(Mandatory = $false, Position = 20)]
+        [validateRange(0, 65535)]
+        [int]$ContactRegistrantTableID = 0,
 
-		[Parameter(Mandatory=$false,Position=10)]
-		[ValidateLenght(1,256)]
-		[string]$DomainName,
+        # If more than one Contact Registrant Entry is in Contact table, stagger Register Requests by 1 second. Applies to UnRegister also. This will only be displayed and applicble if Contact Registract Table is something other than None.
+        [Parameter(Mandatory = $false, Position = 21)]
+        [validateSet(0, 1)]
+        [int]$StaggerRegistration = 0,
 
-		[Parameter(Mandatory=$false,Position=11)]
-		[ValidateRange(0,65535)]
-		[int]$Weight = 0
+        # When enabled, a Register with Expires: 0 will be sent to the SIP Server on power up. After the Unregister (Expires: 0) is complete, a Register (Expires: non-zero) will then be sent.
+        [Parameter(Mandatory = $false, Position = 22)]
+        [validateSet(0, 1)]
+        [int]$ClearRemoteRegistrationOnStartup = 0,
+
+        # Selects whether the Request URI of the incoming request needs to be validated. edsStrict ensures that the request URI is validated, edsLiberal ensures no validation is done.
+        [Parameter(Mandatory = $false, Position = 23)]
+        [validateSet(0, 1)]
+        [int]$SessionURIValidation = 0,
+
+        # If enabled, the following will occur: -Random user values will be generated and put into the Contact-URI of each outgoing Register message. -The random user portion will be saved and compared to incoming Invite Request-Uri's. If the prefix of the R-URI contains SBCxxxx, then if there is a match, SBCxxxx will be stripped and the remaining number used to route (if no match, Invite is not accepted). If there is no SBCxxxx in R-URI, then the number is sent as-is for routing.
+        [Parameter(Mandatory = $false, Position = 24)]
+        [validateSet(0, 1)]
+        [int]$ContactURIRandomizer = 0,
+
+        # This value will only be visible if Remote Authorization Table are defined in SIP Server. When true, if stale=false is received in 401/407, the SBC Edge will set failed retry timer and re-attempt to send Register with same credentials at expiration. When false, if stale=false is received in 401/407, the SBC Edge will never resend a challenged request with the same credentials.(this is RFC behavior)
+        [Parameter(Mandatory = $false, Position = 25)]
+        [validateSet(0, 1)]
+        [int]$RetryNonStaleNonce = 1,
+
+        # If TLS is selected this specifies the TLS profile this server will use for secure SIP messages. 
+        # This option is available if Protocol is set to TLS.
+        [Parameter(Mandatory = $false, Position = 26)]
+        [validateRange(0, 65535)]
+        [int]$TLSProfileID = 0,
+
+        # This value will only be visible if both Contact Registrant Table and Remote Authorization Table are defined in SIP Server. When true, the SBC Edge will include authorization headers obtained from previous 401/407 exchange in registration refresh messages. When false, the SBC Edge will not include authorization headers obtained from previous 401/407 exchange in registration refresh messages.
+        [Parameter(Mandatory = $false, Position = 27)]
+        [validateSet(0, 1)]
+        [int]$AuthorizationOnRefresh = 1
 		
-		Parameters to be added later if needed
-		
-		[Parameter(Mandatory=$false,Position=11)]
-		[ValidateRange(30,300)]
-		[string]$KeepAliveFrequency,
-		
-		[Parameter(Mandatory=$false,Position=12)]
-		[ValidateRange(5,500)]
-		[string]$RecoverFrequency,
-		
-		[Parameter(Mandatory=$false,Position=13)]
-		[ValidateLength(1,256)]
-		[string]$LocalUserName,
-		
-		[Parameter(Mandatory=$false,Position=14)]
-		[ValidateLenght(1,256)]
-		[string]$PeerUserName,
-		
-		[Parameter(Mandatory=$false,Position=15)]
-		[ValidateRange(0,16)]
-		[string]$RemoteAuthorizationTable,
-		
-		[Parameter(Mandatory=$false,Position=16)]
-		[ValidateRange(0,16)]
-		[string]$ContactRegistrantTable,
-		
-		[Parameter(Mandatory=$false,Position=17)]
-		[ValidateSet(0,1)]
-		[string]$SessionURIValidation,
-		
-		[Parameter(Mandatory=$false,Position=18)]
-		[ValidateSet(0,1)]
-		[string]$ReuseTransport,
-		
-		[Parameter(Mandatory=$false,Position=19)]
-		[ValidateSet(1,4)]
-		[string]$TransportSocket,
-		
-		[Parameter(Mandatory=$False,Position=20)]
-		[ValidateSet(0,1)]
-		[int]$ReuseTimeout
-#>		
     )
 
     # First thing we need to do is get a new TableId
@@ -1818,10 +1877,6 @@ Function New-UxSipServerEntry {
         Throw "Unable to get a new entry id"
     }
     
-    # Setting Default Variables
-    $ServerType = 0
-    $DomainName = ""
-    $Weight = 0
 
     $args2 = "ServerLookup=$ServerLookup"
     $args2 += "&ServerType=$ServerType"
@@ -2195,8 +2250,10 @@ Function Get-uxTableToParameter {
         # Pass the page of the SBC wiki entry - We make the assumption that it is the second table
         [Parameter(Mandatory = $false, Position = 0)]
         [string]$Page = "https://support.sonus.net/display/UXAPIDOC/Resource+-+routingentry",
-        [Parameter(Mandatory = $false, Position = 0)]
-        [switch]$helpsection
+        [Parameter(Mandatory = $false, Position = 1)]
+        [switch]$helpsection,
+        [Parameter(Mandatory = $false, Position = 2)]
+        [switch]$listWDefaults
     )
     # $ParsedPage = Invoke-WebRequest "https://support.sonus.net/display/UXAPIDOC/Resource+-+routingentry"
     $ParsedPage = Invoke-WebRequest $page
@@ -2204,21 +2261,46 @@ Function Get-uxTableToParameter {
     $count = -1;
     $Table.rows | ForEach-Object {
         $count = $count + 1
-        if (-not $helpsection) {
-            Write-Output ""
-            Write-output "`# $($_.cells[6].innertext.trim())"
-            Write-output "[Parameter(Mandatory=`$false,Position=$count)]"
-            Write-output "[validateRange(0,100)]"
-            $type = $_.cells[3].innertext.trim()
-            if ($type -eq "enum") { $type = "int" }
-            $str = "[{2}]`${0} = {1}," -f $_.cells[0].innertext.trim(), $_.cells[4].innertext.trim(), $type
+        if ($listWDefaults) {
+            $str = "{0} = {1}," -f $_.cells[0].innertext.trim(), $_.cells[4].innertext.trim()
             Write-output $str
         }
         else {
-            Write-Output ""
-            Write-output ".PARAMETER $($_.cells[0].innertext.trim())"
-            Write-output "    $($_.cells[6].innertext.trim())"
+            if ($helpsection) {
+                Write-Output ""
+                Write-output ".PARAMETER $($_.cells[0].innertext.trim())"
+                Write-output "    $($_.cells[6].innertext.trim())"
+            }
+            else {
+                $type = $_.cells[3].innertext.trim()
+
+                Write-Output ""
+                Write-output "`# $($_.cells[6].innertext.trim())"
+                If ( $($_.cells[1].innertext.trim()) -eq "Yes") {
+                    $Mandatory = "true" 
+                }
+                else {
+                    $Mandatory = "false" 
+                }
+                Write-output "[Parameter(Mandatory=`$$Mandatory,Position=$count)]"
+                If ( $($_.cells[5].innertext.trim()) -like "*Max Length*") {
+                    Write-output "[validateLength(0,256)]"
+                }
+                elseif ($type -eq "enum") {
+                    
+                    Write-output "[validateSet(0,10)]"
+                }
+                else {
+                    Write-output "[validateRange(0,65535)]"
+                }
+                
+                
+                if ($type -eq "enum") { $newtype = "int" } else { $newtype = $type }
+                $str = "[{2}]`${0} = {1}," -f $_.cells[0].innertext.trim(), $_.cells[4].innertext.trim(), $newtype
+                Write-output $str            
+            }
         }
+        
 
         
     }
