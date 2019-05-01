@@ -1,14 +1,23 @@
 [CmdletBinding()]
 Param(
-    [Parameter(Mandatory = $true, Position = 0)]
+    [Parameter(Mandatory = $false, Position = 0)]
     [ValidateNotNullorEmpty()]
     [PSCredential]$Credential,
     [Parameter(Mandatory = $true, Position = 1)]
     [string]$uxhostname,
     [Parameter(Mandatory = $false, Position = 2)]
-    [string]$2ndHostname
+    [string]$2ndHostname,
+    [Parameter(Mandatory = $false, Position = 2)]
+    [string]$SBCuserName,
+    [Parameter(Mandatory = $false, Position = 2)]
+    [string]$SBCPassword
 )
 
+
+if(-not $credential ){
+    $secpasswd = ConvertTo-SecureString $SBCPassword -AsPlainText -Force
+    $Credential = New-Object System.Management.Automation.PSCredential ($SBCuserName, $secpasswd)
+}
 
 $ProjectRoot = Resolve-Path "$PSScriptRoot\.."
 $ModuleRoot = Split-Path (Resolve-Path "$ProjectRoot\*.psd1")

@@ -13,10 +13,11 @@ steps:
     VersionNumber: $(GitVersion.MajorMinorPatch)
 
 - task: richardfennellBM.BM-VSTS-PesterRunner-Task.Pester-Task.Pester@8
-  displayName: 'Pester Test Runner'
+  displayName: 'Pester Test Runner for $(SBCuser)'
   inputs:
     CodeCoverageOutputFile: '$(System.DefaultWorkingDirectory)\Coverage-Pester.XML'
     CodeCoverageFolder: '$(System.DefaultWorkingDirectory)'
+    scriptFolder: '@{Path='$(System.DefaultWorkingDirectory)'; Parameters=@{uxhostname='$(SBCAddress)'; SBCuserName='$(SBCuser)'; SBCPassword='$(SBCpass)'}}'
 
 - task: PublishTestResults@2
   displayName: 'Publish Test Results'
