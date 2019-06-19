@@ -1,3 +1,5 @@
+[![Build Status](https://dev.azure.com/chris-burns/Posh-Ribbon/_apis/build/status/EgoManiac.Posh-Ribbon?branchName=master)](https://dev.azure.com/chris-burns/Posh-Ribbon/_build/latest?definitionId=1&branchName=master)
+
 # Posh-Ribbon Powershell Module
 Previously known as RibbonSBCEdge
 
