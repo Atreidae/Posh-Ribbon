@@ -1,6 +1,13 @@
 pool:
   name: Hosted VS2017
 steps:
+- task: AzurePowerShell@4
+  inputs:
+    azureSubscription: '$(AzureID)'
+    ScriptType: 'InlineScript'
+    Inline: 'Start-AzVM -Name "$(SBC-Name)" -ResourceGroupName "$(SBC-RG)"'
+    azurePowerShellVersion: 'LatestVersion'
+
 - task: gittools.gitversion.gitversion-task.GitVersion@4
   displayName: GitVersion
   inputs:
