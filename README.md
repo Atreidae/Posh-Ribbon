@@ -8,7 +8,6 @@ This project is a Powershell module that allow to control Ribbon SBC Edge with R
 **This project is completely independent from Ribbon Communication. Ribbon is not responsible for any issue with this module. If you have issue with Ribbon product contact the Ribbon support.**
 
 
-
 This is Version 2 of the Module which has been developed and rewrote from the ground up to better comply with
 PowerShell Module Design and provide a more modular approach to the cmdlets. Extending the cmdlets is much
 easier now as they rely on a single "engine" to do the heavy lifting.
