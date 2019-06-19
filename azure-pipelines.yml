@@ -5,7 +5,7 @@ steps:
   inputs:
     azureSubscription: '$(AzureID)'
     ScriptType: 'InlineScript'
-    Inline: 'Start-AzVM -Name "$(SBC-Name)" -ResourceGroupName "$(SBC-RG)"'
+    Inline: 'Start-AzVM -Id "$(SBC-Name)" -ResourceGroupName "$(SBC-RG)"'
     azurePowerShellVersion: 'LatestVersion'
 
 - task: gittools.gitversion.gitversion-task.GitVersion@4
