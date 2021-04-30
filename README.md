@@ -23,10 +23,13 @@ https://support.sonus.net/display/UXDOC80/SBC+SWe+Lite+Trial+Offer+for+Microsoft
 
 ## Version History
 
+Version 3 is an upgrade to the certificate engine to allow PowerShell 7 usage.
+
 Version 2 is a rewrite and a more modular design By Chris Burns from GCIcom. http://www.posh.dev
 
 Version 1 ( Now considered Legacy Code ) was written by Vikas Jaswal. http://www.allthingsuc.co.uk/about-me/
 
+    Version 3.0     29/APR/2021 -  Updated XML parser and added PS7 support. - Chris Burns
 	Version 2.1     26/04/19    -  Updated Ready For Powershell Gallery - Chris Burns
     Version 2.1     25/04/19    -  Updated with some more Get and New Commands especially Call Routing Table - Chris Burns
     Version 2.0     15/04/19    -  *NEW Version* - Rewrite for modern module design, better use of [XML] accelerator and details switch,
@@ -44,6 +47,8 @@ Version 1 ( Now considered Legacy Code ) was written by Vikas Jaswal. http://www
 
 ## Key Features
 
+- Support for PowerShell 7 and 5.1
+- Support for selfsigned and truseted certificates (use of SkipCertCheck parameter for selfsigned certs)
 - Built-in cmdlets to query Sonus SBC for transformation tables, transformation entries, systems information, etc.
 - Built-in cmdlets to create transformation tables and transformation entries
 - Built-in cmdlets for running any command against the SBC. (Backup/Reboot)
@@ -63,7 +68,7 @@ Version 1 ( Now considered Legacy Code ) was written by Vikas Jaswal. http://www
 
 ## Getting Started
 
-1. Will be submitted to PowerShell Gallery and eventually can be installed with Install-Module Posh-Ribbon
+1. Submitted to PowerShell Gallery and installed with  - Install-Module Posh-Ribbon
 
 #### DEV's
 

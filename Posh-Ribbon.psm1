@@ -60,11 +60,14 @@ Function Connect-UxGateway {
 	
 	.PARAMETER credentials
 	Pass a secure credential to the cmdlet, this should be your REST API credentials.
+
+    .PARAMETER SkipCertCheck
+    Use this switch to tell the cmdlet that you will be connecting to an SBC without a valid certificate
 	
 	
 	.EXAMPLE
 	$Creds = Get-credential
-	connect-uxgateway -uxhostname 1.1.1.1 -Credentials $Creds
+	connect-uxgateway -uxhostname 1.1.1.1 -Credentials $Creds -SkipCertCheck
 	
 	.EXAMPLE
 	$Creds = Get-credential
@@ -72,8 +75,8 @@ Function Connect-UxGateway {
 
     .EXAMPLE
 	$Creds = Get-credential
-    $Session1 = connect-uxgateway -uxhostname lyncsbc01.COMPANY.co.uk -Credentials $Creds
-    $Session2 = connect-uxgateway -uxhostname lyncsbc02.COMPANY.co.uk -Credentials $Creds
+    $Session1 = connect-uxgateway -uxhostname lyncsbc01.COMPANY.co.uk -Credentials $Creds -SkipCertCheck
+    $Session2 = connect-uxgateway -uxhostname lyncsbc02.COMPANY.co.uk -Credentials $Creds -SkipCertCheck
 	
 	#>
     [cmdletbinding()]
