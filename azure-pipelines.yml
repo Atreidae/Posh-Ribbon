@@ -20,7 +20,7 @@ steps:
     VersionNumber: $(GitVersion.MajorMinorPatch)
 
 
-- task: Pester@10
+- task: Pester.PesterRunner.Pester-Task.Pester@10
   displayName: 'Pester Test Runner for $(SBCuser)'
   inputs:
     scriptFolder: "@{Path='$(System.DefaultWorkingDirectory)'; Parameters=@{uxhostname='$(SBCAddress)'; SBCuserName='$(SBCuser)'; SBCPassword='$(SBCpass)'}}"
