@@ -44,7 +44,7 @@ Describe "Connection" {
     }
     
     
-    $1stSession = connect-uxgateway -uxhostname $uxhostname -credentials $Credential
+    $1stSession = connect-uxgateway -uxhostname $uxhostname -credentials $Credential -SkipCertCheck
             
     Context "When Logging In with Actual Credentials" {
         it 'uxSession return object should include the host name provided above' {
@@ -69,7 +69,7 @@ Describe "Connection" {
       
     }
     if ($2ndHostname) {
-        $2ndSession = connect-uxgateway -uxhostname $2ndHostname -credentials $Credential
+        $2ndSession = connect-uxgateway -uxhostname $2ndHostname -credentials $Credential -SkipCertCheck
         Context "Testing Connections Using two Sessions" {
             
             it 'uxSession return object for first session should include the host name provided' {
@@ -89,9 +89,9 @@ Describe "Connection" {
     }
 }
 Describe "Getting Information Back from Get Cmdlets" {
-    $1stSession = connect-uxgateway -uxhostname $uxhostname -credentials $Credential -ea stop
+    $1stSession = connect-uxgateway -uxhostname $uxhostname -credentials $Credential -ea stop -SkipCertCheck
     if ($2ndHostname) {
-        $2ndSession = connect-uxgateway -uxhostname $2ndHostname -credentials $Credential
+        $2ndSession = connect-uxgateway -uxhostname $2ndHostname -credentials $Credential -SkipCertCheck
     }
     Context "Testing the `"Engine`" cmdlet get-UXResource " {
         it "should not error if we ask for a valid resource" {
@@ -116,7 +116,7 @@ Describe "Getting Information Back from Get Cmdlets" {
     
 
     Context "Getting System Info testing get-uxSystemInfo" {
-        connect-uxgateway -uxhostname $uxhostname -credentials $Credential -ea stop
+        connect-uxgateway -uxhostname $uxhostname -credentials $Credential -ea stop -SkipCertCheck
         it 'An XML object Should be returned for the DEFAULT session' {
             
             (Get-UxSystemInfo) | Should -BeOfType System.Xml.XmlElement
