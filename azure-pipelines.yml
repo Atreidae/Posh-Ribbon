@@ -19,13 +19,17 @@ steps:
     VersionRegex: '\d+\.\d+\.\d+'
     VersionNumber: $(GitVersion.MajorMinorPatch)
 
-- task: richardfennellBM.BM-VSTS-PesterRunner-Task.Pester-Task.Pester@8
+
+- task: Pester.PesterRunner.Pester-Task.Pester@10
   displayName: 'Pester Test Runner for $(SBCuser)'
   inputs:
-    CodeCoverageOutputFile: '$(System.DefaultWorkingDirectory)\Coverage-Pester.XML'
-    CodeCoverageFolder: '$(System.DefaultWorkingDirectory)'
     scriptFolder: "@{Path='$(System.DefaultWorkingDirectory)'; Parameters=@{uxhostname='$(SBCAddress)'; SBCuserName='$(SBCuser)'; SBCPassword='$(SBCpass)'}}"
+    resultsFile: '$(System.DefaultWorkingDirectory)\Test-Pester.XML'
+    CodeCoverageOutputFile: '$(System.DefaultWorkingDirectory)\Coverage-Pester.XML'
+    usePSCore: False
+    CodeCoverageFolder: '$(System.DefaultWorkingDirectory)'
   condition: succeededOrFailed()
+
 
 - task: PublishTestResults@2
   displayName: 'Publish Test Results'
