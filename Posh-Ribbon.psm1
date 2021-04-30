@@ -1,18 +1,19 @@
 <#
     .SYNOPSIS 
-      RibbonSBCEdge Powershell module allows access to Ribbon SBC Edge via PowerShell using REST API's.
+      Posh-Ribbon Powershell module allows access to Ribbon SBC Edge via PowerShell using REST API's.
 	 
 	.DESCRIPTION
 	  
 	  For the module to run correctly following pre-requisites should be met:
-	  1) PowerShell v4.0
+	  1) Powershell 7 OR latest version PowerShell v5.1 (5.1 will be phased out at a future date)
 	  2) Ribbon SBC Edge on R3.0 or higher ( Tested on SBC R8.0 )
-	  3) Create REST logon credentials (http://www.allthingsuc.co.uk/accessing-sonus-ux-with-rest-apis/)
+	  3) Create REST logon credentials (https://support.sonus.net/display/UXDOC50/Managing+Local+Users)
     
       Once you have created the account use help Connect-UxGateway to get started.
 	 
 	.NOTES
 		Name: RibbonEdge
+        V3 Author: Chris Burns (PoshDev)
         V2 Author: Chris Burns (GCIcom)
         V1 Author: Vikas Jaswal (Modality Systems Ltd)
 		Additional cmdlets added by: Kjetil Lindløkken
@@ -20,6 +21,7 @@
         
 		
 		Version History:
+        Version 3.0 - 29/Apr/21 - Updated to allow use with Powershell 7 and Powershell 5 ( Fixes include XML parser and Certificate policy)
         Version 2.1 - 25/04/19 - Updated with some more Get and New Commands especially Call Routing Table - Chris Burns
         Version 2.0 - 15/04/19 - *NEW Version* - Rewrite for modern module design, better use of [XML] accelerator and details switch,
                                  a new custom uxSession Object to allow for access to multiple SBC's at once and a Custom XML -> PSObject Parser - Chris Burns
@@ -38,7 +40,7 @@
 	
     .LINK
         http://www.posh.dev
-		http://www.allthingsuc.co.uk
+		
      
   #>
 
@@ -80,28 +82,44 @@ Function Connect-UxGateway {
         [string]$uxhostname,
         # The Rest API Credentials to get into the SBC
         [Parameter(Mandatory = $true, Position = 1)]
-        [pscredential]$Credentials
+        [pscredential]$Credentials,
+        [Parameter(Mandatory = $false, Position = 1)]
+        [switch]$SkipCertCheck
     )
-	
-    if (!($TrustAllCertsPolicy)) {
-        #Ignore SSL, without this GET commands dont work with SBC Edge
-        add-type @"
-	using System.Net;
-	using System.Security.Cryptography.X509Certificates;
-	public class TrustAllCertsPolicy : ICertificatePolicy {
-		public bool CheckValidationResult(
-			ServicePoint srvPoint, X509Certificate certificate,
-			WebRequest request, int certificateProblem) {
-			return true;
-		}
-	}
+    # We need a check here to determine the host version
+    #  we do this as ignoring certificate issues is handeled differently in version 7 and version 5
+    if($PSVersionTable.psversion.Major -gt 5) {$PSCore = $true} else {$PSCore = $false}
+
+
+	#[System.Net.ServicePointManager]::CertificatePolicy = New-Object TrustAllCertsPolicy
+    if($SkipCertCheck){
+        
+         if (!($pscore)) {
+            #Ignore SSL, without this GET commands dont work with SBC Edge
+            add-type @"
+            using System.Net;
+            using System.Security.Cryptography.X509Certificates;
+            public class TrustAllCertsPolicy : ICertificatePolicy {
+                public bool CheckValidationResult(
+                    ServicePoint srvPoint, X509Certificate certificate,
+                    WebRequest request, int certificateProblem) {
+                    return true;
+                }
+	        }
 "@
 
-        [System.Net.ServicePointManager]::CertificatePolicy = New-Object TrustAllCertsPolicy
+        
         #Force TLS1.2
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 		
+       }
     }
+
+
+    
+
+
+    
     $null = $Session
 
     #Login to SBC Edge
@@ -109,12 +127,17 @@ Function Connect-UxGateway {
     $url = "https://$uxhostname/rest/login"
 	
     Try {
-        $uxcommand1output = Invoke-RestMethod -Uri $url -Method Post -Body $AuthenticationString -SessionVariable Session -ErrorAction Stop
+        if($pscore -and $SkipCertCheck){
+            $uxcommand1output = Invoke-RestMethod -Uri $url -Method Post -Body $AuthenticationString -SessionVariable Session -ErrorAction Stop -SkipCertificateCheck
+        }else{
+            $uxcommand1output = Invoke-RestMethod -Uri $url -Method Post -Body $AuthenticationString -SessionVariable Session -ErrorAction Stop
+        }
     }
     Catch {
-        throw "$uxhostname - Unable to connect to $uxhostname. Verify $uxhostname is accessible on the network. The error message returned is $_"
+        throw "$uxhostname - Unable to connect. Verify host is accessible on the network and check if you have ignored selfsigned certificates if needed. The error message returned is $_"
     }
-    $Result = ([xml]$uxcommand1output.trim()).root
+    #$Result = ([xml]$uxcommand1output.trim()).root
+    $Result = ([xml]$($uxcommand1output.trim())).root
     $Success = $Result.status.http_code
     Write-verbose "Response Code = $Success"
 	
@@ -123,8 +146,8 @@ Function Connect-UxGateway {
     If ( $Success -ne "200") {
         #Unable to Login
         Write-verbose $uxcommand1output.trim()
-        throw "$uxhostname - Login unsuccessful, logon credentials are incorrect OR you may not be using REST Credentials.`
-		For further information check `"http://www.allthingsuc.co.uk/accessing-sonus-ux-with-rest-apis`""
+        throw "$uxhostname - Login unsuccessful, logon credentials are incorrect OR you may not be using REST Credentials."
+		
     }
 
     Write-Information "Successfully connected to $uxhostname"
@@ -134,6 +157,9 @@ Function Connect-UxGateway {
         host               = $uxhostname
         session            = $Session
         credentials        = $Credentials
+        powershellVer      = $PSVersionTable.psversion.Major
+        pscore             = $pscore
+        ignoreCert         = $SkipCertCheck   
         DefaultSessionType = $true
     }
     $DefaultSession.PSObject.TypeNames.Insert(0, "UX.SBCSessionObject")
@@ -142,6 +168,9 @@ Function Connect-UxGateway {
         host               = $uxhostname
         session            = $Session
         credentials        = $Credentials
+        powershellVer      = $PSVersionTable.psversion.Major 
+        ignoreCert         = $SkipCertCheck   
+        pscore             = $pscore
         DefaultSessionType = $false            # Setting this will tell future scripts if the session has been passed to them OR if it is the default session
     }
     $ReturnObject.PSObject.TypeNames.Insert(0, "UX.SBCSessionObject")
@@ -442,7 +471,12 @@ Function Get-UxResource {
     Write-verbose "Connecting to $url"
 	
     Try {
-        $uxrawdata = Invoke-RestMethod -Uri $url -Method GET -WebSession $($uxSession.Session)
+        if($($uxSession.ignoreCert) -and $($uxSession.pscore)){
+            $uxrawdata = Invoke-RestMethod -Uri $url -Method GET -WebSession $($uxSession.Session) -SkipCertificateCheck
+        }else{
+            $uxrawdata = Invoke-RestMethod -Uri $url -Method GET -WebSession $($uxSession.Session)
+        }
+        
     }
 	
     Catch {
@@ -450,7 +484,12 @@ Function Get-UxResource {
             if ($uxSession.DefaultSessionType) {
                 Write-Warning "Session Expired - Trying to renew session to $($uxSession.host)"
                 Connect-UxGateway -uxhostname $DefaultSession.host -Credentials $DefaultSession.Credentials
-                $uxrawdata = Invoke-RestMethod -Uri $url -Method GET -WebSession $($uxSession.Session) -ErrorAction Stop
+                if($($uxSession.ignoreCert) -and $($uxSession.pscore)){
+                    $uxrawdata = Invoke-RestMethod -Uri $url -Method GET -WebSession $($uxSession.Session) -ErrorAction Stop -SkipCertificateCheck
+                }else{
+                    $uxrawdata = Invoke-RestMethod -Uri $url -Method GET -WebSession $($uxSession.Session) -ErrorAction Stop
+                }
+               
             }
         }
         catch {
@@ -464,7 +503,8 @@ Function Get-UxResource {
         }    
     }
 
-    $Result = ([xml]$uxrawdata.trim()).root
+    $Result = ([xml]$($uxrawdata.trim())).root
+    #$Result = ([xml]$uxrawdata).root
     $Success = $Result.status.http_code
 
     #Check if connection was successful.HTTP code 401 is returned which means the session has expired
@@ -474,7 +514,11 @@ Function Get-UxResource {
             if ($uxSession.DefaultSessionType) {
                 Write-Warning "Session Expired - Trying to renew session to $($uxSession.host)"
                 Connect-UxGateway -uxhostname $DefaultSession.host -Credentials $DefaultSession.Credentials
-                $uxrawdata = Invoke-RestMethod -Uri $url -Method GET -WebSession $($DefaultSession.Session) -ErrorAction Stop
+                if($($uxSession.ignoreCert) -and $($uxSession.pscore)){
+                    $uxrawdata = Invoke-RestMethod -Uri $url -Method GET -WebSession $($uxSession.Session) -ErrorAction Stop -SkipCertificateCheck
+                }else{
+                    $uxrawdata = Invoke-RestMethod -Uri $url -Method GET -WebSession $($uxSession.Session) -ErrorAction Stop
+                }
             }
             
 
@@ -483,7 +527,8 @@ Function Get-UxResource {
             #Unable to Login again
             throw "We tried to reauthenticate and run your command again but failed, Try to rerun your command, OR use Connect-UxGateWay cmdlet again"
         }
-        $Result = ([xml]$uxrawdata.trim()).root
+        $Result = ([xml]$($uxrawdata.trim())).root
+        #$Result = ([xml]$uxrawdata).root
         $Success = $Result.status.http_code    
     }
 		
@@ -582,7 +627,12 @@ Function New-UxResource {
     $msg = "Adding A New Entry to $resource on the $($uxSession.host) Gateway with ID $Index"
     if ($PSCmdlet.ShouldProcess($($msg))) {
         Try {
-            $uxrawdata = Invoke-RestMethod -Uri $url -Method PUT -Body $Arguments -WebSession $($uxSession.Session) -ErrorAction Stop
+            if($($uxSession.ignoreCert) -and $($uxSession.pscore)){
+                $uxrawdata = Invoke-RestMethod -Uri $url -Method PUT -Body $Arguments -WebSession $($uxSession.Session) -ErrorAction Stop -SkipCertificateCheck
+            }else{
+                $uxrawdata = Invoke-RestMethod -Uri $url -Method PUT -Body $Arguments -WebSession $($uxSession.Session) -ErrorAction Stop
+            }
+            
         }
 	
         Catch {
@@ -590,7 +640,8 @@ Function New-UxResource {
         }
 	
     
-        $Result = ([xml]$uxrawdata.trim()).root
+        $Result = ([xml]$($uxrawdata.trim())).root
+        #$Result = ([xml]$uxrawdata).root
         $Success = $Result.status.http_code
         
         
@@ -691,7 +742,12 @@ Function Send-UxCommand {
             }
             if ($OutPutFilename) { $options.OutFile = $OutPutFilename }
 
-            $uxrawdata = Invoke-RestMethod @options
+            if($($uxSession.ignoreCert) -and $($uxSession.pscore)){
+                $uxrawdata = Invoke-RestMethod @options -SkipCertificateCheck
+            }else{
+                $uxrawdata = Invoke-RestMethod @options
+            }
+            
         }
 	
         Catch {
@@ -699,7 +755,8 @@ Function Send-UxCommand {
         }
 	
     
-        $Result = ([xml]$uxrawdata.trim()).root
+        $Result = ([xml]$($uxrawdata.trim())).root
+        #$Result = ([xml]$uxrawdata).root
         $Success = $Result.status.http_code
         
         switch ( $Success) {            
@@ -800,7 +857,12 @@ Function Remove-UxResource {
     if ($index) { $msg += "with ID $Index" }
     if ($PSCmdlet.ShouldProcess($($msg))) {
         Try {
-            $uxrawdata = Invoke-RestMethod -Uri $url -Method DELETE -Body $Arguments -WebSession $uxSession.Session -ErrorAction Stop
+            if($($uxSession.ignoreCert) -and $($uxSession.pscore)){
+                $uxrawdata = Invoke-RestMethod -Uri $url -Method DELETE -Body $Arguments -WebSession $uxSession.Session -ErrorAction Stop -SkipCertificateCheck
+            }else{
+                $uxrawdata = Invoke-RestMethod -Uri $url -Method DELETE -Body $Arguments -WebSession $uxSession.Session -ErrorAction Stop
+            }
+            
         }
 	
         Catch {
@@ -808,7 +870,8 @@ Function Remove-UxResource {
         }
 	
     
-        $Result = ([xml]$uxrawdata.trim()).root
+        $Result = ([xml]$($uxrawdata.trim())).root
+        #$Result = ([xml]$uxrawdata).root
         $Success = $Result.status.http_code
 		
         
@@ -897,14 +960,20 @@ Function Set-UxResource {
     $msg = "Deleting A New Entry to $resource on the $($uxSession.host) Gateway with ID $Index"
     if ($PSCmdlet.ShouldProcess($($msg))) {
         Try {
-            $uxrawdata = Invoke-RestMethod -Uri $url -Method POST -Body $Arguments -WebSession $uxSession.Session -ErrorAction Stop
+            if($($uxSession.ignoreCert) -and $($uxSession.pscore)){
+                $uxrawdata = Invoke-RestMethod -Uri $url -Method POST -Body $Arguments -WebSession $uxSession.Session -ErrorAction Stop -SkipCertificateCheck
+            }else{
+                $uxrawdata = Invoke-RestMethod -Uri $url -Method POST -Body $Arguments -WebSession $uxSession.Session -ErrorAction Stop
+            }
+            
         }
 	
         Catch {
             throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_"
         }
 	    
-        $Result = ([xml]$uxrawdata.trim()).root
+        $Result = ([xml]$($uxrawdata.trim())).root
+        #$Result = ([xml]$uxrawdata).root
         $Success = $Result.status.http_code
 	    
         switch ( $Success) {            
@@ -2241,7 +2310,7 @@ Function New-UxCallRoutingEntry {
 Function Get-uxTableToParameter {
     <#
     .SYNOPSIS      
-        A small helper function which parses the Ribbon Wiki to create a list of parameters
+        A small helper function which parses the Ribbon Wiki to create a list of parameters ( This will only work on powershell version 5 and below)
         
     .DESCRIPTION
         Creating a parameter list is a pain in the ass, so i created a small function that will query the wiki and copy a parameter list to the clip board
@@ -2260,6 +2329,9 @@ Function Get-uxTableToParameter {
         [Parameter(Mandatory = $false, Position = 2)]
         [switch]$listWDefaults
     )
+    if($PSVersionTable.PSVersion.Major -gt 5){
+        Write-Error "This cmdlet can only work on windows versions of powershell 5.1 and below due to the html parser not being avaialble in version 7" -ErrorAction Stop
+    }
     # $ParsedPage = Invoke-WebRequest "https://support.sonus.net/display/UXAPIDOC/Resource+-+routingentry"
     $ParsedPage = Invoke-WebRequest $page
     $Table = $ParsedPage.ParsedHtml.getElementsByTagName('TABLE')[1]
