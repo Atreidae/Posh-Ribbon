@@ -2,31 +2,34 @@
     .SYNOPSIS 
       Posh-Ribbon Powershell module allows access to Ribbon SBC Edge via PowerShell using REST API's.
 	 
-	.DESCRIPTION
+    .DESCRIPTION
 	  
-	  For the module to run correctly following pre-requisites should be met:
-	  1) Powershell 7 OR latest version PowerShell v5.1 (5.1 will be phased out at a future date)
-	  2) Ribbon SBC Edge on R3.0 or higher ( Tested on SBC R8.0 )
-	  3) Create REST logon credentials (https://support.sonus.net/display/UXDOC50/Managing+Local+Users)
+    For the module to run correctly following pre-requisites should be met:
+    1) Powershell 7 OR latest version PowerShell v5.1 (5.1 will be phased out at a future date)
+    2) Ribbon SBC Edge on R3.0 or higher ( Tested on SBC R8.0 )
+    3) Create REST logon credentials (https://support.sonus.net/display/UXDOC50/Managing+Local+Users)
     
       Once you have created the account use help Connect-UxGateway to get started.
 	 
-	.NOTES
-		Name: RibbonEdge
+    .NOTES
+    Name: RibbonEdge
         V3 Author: Chris Burns (PoshDev)
         V2 Author: Chris Burns (GCIcom)
         V1 Author: Vikas Jaswal (Modality Systems Ltd)
-		Additional cmdlets added by: Kjetil Lindløkken
+    Additional cmdlets added by: Kjetil Lindløkken
         Additional cmdlets added by: Adrien Plessis
+        Additional cmdlets added by: James Arber (UcMadScientist.com) 
+
         
 		
-		Version History:
+    Version History:
+        Version 3.1 - 05/Dec/21 - Added functionaility to manage SIP Registrar for quickly adding SIP extensions / ATA's etc. Layout and Spelling fixes, removed redundant function descriptors, applied ISESteroids reccomendations, Added fix for XML Trim on PS 5.1)
         Version 3.0 - 29/Apr/21 - Updated to allow use with Powershell 7 and Powershell 5 ( Fixes include XML parser and Certificate policy)
         Version 2.1 - 25/04/19 - Updated with some more Get and New Commands especially Call Routing Table - Chris Burns
         Version 2.0 - 15/04/19 - *NEW Version* - Rewrite for modern module design, better use of [XML] accelerator and details switch,
                                  a new custom uxSession Object to allow for access to multiple SBC's at once and a Custom XML -> PSObject Parser - Chris Burns
         
-		Version 1.7 - 20/12/18 - Match Ribbon rebranding, Update link to Ribbon Docs - Adrien Plessis
+    Version 1.7 - 20/12/18 - Match Ribbon rebranding, Update link to Ribbon Docs - Adrien Plessis
         Version 1.6 - 04/10/18 - Added new-uxsipprofile cmdlet - Kjetil Lindløkken
         Version 1.5 - 03/10/18 - Added optional parameter to the get-uxsipprofile cmdlet to add id directly - Kjetil Lindløkken
         Version 1.4 - 03/10/18 - Added new-uxsipserverentry cmdlet - Kjetil Lindløkken
@@ -36,7 +39,7 @@
         Version 1.0 - 30/11/13 - Module Created - Vikas Jaswal
         
 		
-		Please use the script at your own risk!
+    Please use the script at your own risk!
 	
     .LINK
         http://www.posh.dev
@@ -44,45 +47,43 @@
      
   #>
 
-
-
 Function Connect-UxGateway {
     <#
-	.SYNOPSIS      
-	 This cmdlet connects to the Ribbon SBC and extracts the session token and places it into a custom PS Object called uxSession
+      .SYNOPSIS      
+      This cmdlet connects to the Ribbon SBC and extracts the session token and places it into a custom PS Object called uxSession
 	 
-	.DESCRIPTION
-    This cmdlet connects to the Ribbon SBC and extracts the session token required for subsequent cmdlets.
-    All other cmdlets will fail if this command is not successfully executed.
+      .DESCRIPTION
+      This cmdlet connects to the Ribbon SBC and extracts the session token required for subsequent cmdlets.
+      All other cmdlets will fail if this cmdlet is not successfully executed.
 	
-	.PARAMETER uxhostname
-	Enter here the hostname or IP address of the Ribbon SBC
+      .PARAMETER UxHostname
+      Enter the hostname or IP address of the Ribbon SBC here
 	
-	.PARAMETER credentials
-	Pass a secure credential to the cmdlet, this should be your REST API credentials.
+      .PARAMETER Credentials
+      Pass a secure credential to the cmdlet, this should be your REST API credentials.
 
-    .PARAMETER SkipCertCheck
-    Use this switch to tell the cmdlet that you will be connecting to an SBC without a valid certificate
+      .PARAMETER SkipCertCheck
+      Use this switch to tell the cmdlet that you will be connecting to an SBC without a valid certificate
 	
 	
-	.EXAMPLE
-	$Creds = Get-credential
-	connect-uxgateway -uxhostname 1.1.1.1 -Credentials $Creds -SkipCertCheck
+      .EXAMPLE
+      $Creds = Get-Credential
+      Connect-UxGateway -UxHostname 1.1.1.1 -Credentials $Creds -SkipCertCheck
 	
-	.EXAMPLE
-	$Creds = Get-credential
-	connect-uxgateway -uxhostname lyncsbc01.COMPANY.co.uk -Credentials $Creds
+      .EXAMPLE
+      $Creds = Get-Credential
+      Connect-UxGateway -UxHostname lyncsbc01.COMPANY.co.uk -Credentials $Creds
 
-    .EXAMPLE
-	$Creds = Get-credential
-    $Session1 = connect-uxgateway -uxhostname lyncsbc01.COMPANY.co.uk -Credentials $Creds -SkipCertCheck
-    $Session2 = connect-uxgateway -uxhostname lyncsbc02.COMPANY.co.uk -Credentials $Creds -SkipCertCheck
+      .EXAMPLE
+      $Creds = Get-Credential
+      $Session1 = Connect-UxGateway -UxHostname lyncsbc01.COMPANY.co.uk -Credentials $Creds -SkipCertCheck
+      $Session2 = Connect-UxGateway -UxHostname lyncsbc02.COMPANY.co.uk -Credentials $Creds -SkipCertCheck
 	
-	#>
+  #>
     [cmdletbinding()]
     Param(
         [Parameter(Mandatory = $true, Position = 0)]
-        [string]$uxhostname,
+        [string]$UxHostname,
         # The Rest API Credentials to get into the SBC
         [Parameter(Mandatory = $true, Position = 1)]
         [pscredential]$Credentials,
@@ -90,11 +91,11 @@ Function Connect-UxGateway {
         [switch]$SkipCertCheck
     )
     # We need a check here to determine the host version
-    #  we do this as ignoring certificate issues is handeled differently in version 7 and version 5
+    # we do this as ignoring certificate issues is handeled differently in PS version 7 and version 5
     if($PSVersionTable.psversion.Major -gt 5) {$PSCore = $true} else {$PSCore = $false}
 
 
-	#[System.Net.ServicePointManager]::CertificatePolicy = New-Object TrustAllCertsPolicy
+  #[System.Net.ServicePointManager]::CertificatePolicy = New-Object TrustAllCertsPolicy
     if($SkipCertCheck){
         
          if (!($pscore)) {
@@ -110,24 +111,21 @@ Function Connect-UxGateway {
                 }
 	        }
 "@
-
+           #Enable using IP Addresses and self signed certes
+           [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
         
-        #Force TLS1.2
-        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+           #Force TLS1.2
+           [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 		
-       }
+         }
     }
-
-
-    
-
 
     
     $null = $Session
 
     #Login to SBC Edge
     $AuthenticationString = "Username={0}&Password={1}" -f $Credentials.GetNetworkCredential().username, $Credentials.GetNetworkCredential().password
-    $url = "https://$uxhostname/rest/login"
+    $url = "https://$UxHostname/rest/login"
 	
     Try {
         if($pscore -and $SkipCertCheck){
@@ -137,7 +135,7 @@ Function Connect-UxGateway {
         }
     }
     Catch {
-        throw "$uxhostname - Unable to connect. Verify host is accessible on the network and check if you have ignored selfsigned certificates if needed. The error message returned is $_"
+        throw "$UxHostname - Unable to connect. Verify host is accessible on the network and check if you have ignored selfsigned certificates if needed. The error message returned is $_"
     }
     #$Result = ([xml]$uxcommand1output.trim()).root
     $Result = ([xml]$($uxcommand1output.trim())).root
@@ -145,19 +143,19 @@ Function Connect-UxGateway {
     Write-verbose "Response Code = $Success"
 	
 	
-    #Check if the Login was successfull.HTTP code 200 is returned if login is successful
+    #Check if the Login was successfull. HTTP code 200 is returned if login is successful
     If ( $Success -ne "200") {
         #Unable to Login
         Write-verbose $uxcommand1output.trim()
-        throw "$uxhostname - Login unsuccessful, logon credentials are incorrect OR you may not be using REST Credentials."
+        throw "$UxHostname - Login unsuccessful, logon credentials are incorrect OR you may not be using REST credentials."
 		
     }
 
-    Write-Information "Successfully connected to $uxhostname"
+    Write-Information "Successfully connected to $UxHostname"
     Write-verbose $uxcommand1output.trim()
 
     $script:DefaultSession = [PSCustomObject]@{
-        host               = $uxhostname
+        host               = $UxHostname
         session            = $Session
         credentials        = $Credentials
         powershellVer      = $PSVersionTable.psversion.Major
@@ -168,7 +166,7 @@ Function Connect-UxGateway {
     $DefaultSession.PSObject.TypeNames.Insert(0, "UX.SBCSessionObject")
     
     $ReturnObject = [PSCustomObject]@{
-        host               = $uxhostname
+        host               = $UxHostname
         session            = $Session
         credentials        = $Credentials
         powershellVer      = $PSVersionTable.psversion.Major 
@@ -182,34 +180,32 @@ Function Connect-UxGateway {
     
 }
 
-
-#Function to grab SBC Edge system information
 Function Get-UxSystemInfo {
     <#
-	.SYNOPSIS      
-	 This cmdlet collects System information from Ribbon SBC.
+      .SYNOPSIS      
+      This cmdlet collects system information from a Ribbon SBC.
     
-    .EXAMPLE
-    get-uxSystemInfo
+      .EXAMPLE
+      Get-UxSystemInfo
 
-    Gets System information from the last connected SBC. 
+      Gets system information from the last connected SBC. 
 
-	.EXAMPLE
-    $Creds = Get-credential
+      .EXAMPLE
+      $Creds = Get-Credential
     
-	PS:>$Obj = connect-uxgateway -uxhostname lyncsbc01.COMPANY.co.uk -Credentials $Creds
+      PS:> $Obj = (Connect-UxGateway -UxHostname lyncsbc01.COMPANY.co.uk -Credentials $Creds)
     
-    PS:>get-uxSystemInfo -uxSession $obj
+      PS:> Get-UxSystemInfo -uxSession $obj
 
-    This example stores the credential in a credential object and uses that credential to store a uxSession Object.
-    With this object we can now call the get-uxSystemInfo for any session object. Therby allowing us to get information from
-    any amount of SBC's.
+      This example stores the credential in a credential object and uses that credential to store a uxSession Object.
+      With this object we can now call the get-uxSystemInfo for any session object. Therby allowing us to get information from
+      any amount of SBC's.
 	
-	#>
+  #>
 	
     [cmdletbinding()]
     Param(
-        #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
+        #If using multiple servers you will need to pass the uxSession Object created by Connect-UxGateway
         #Else it will look for the last created session using the command above
         [Parameter(Mandatory = $false, Position = 0)]
         [PSCustomObject]$uxSession
@@ -224,38 +220,37 @@ Function Get-UxSystemInfo {
     }
     if ($uxSession) { $ResourceSplat.uxSession = $uxSession }
 
-    get-uxresource @ResourceSplat
+    Get-UxResource @ResourceSplat
     
 }
 
-#Function to grab UX Global Call counters
 Function Get-UxSystemCallStats {
     <#
-	.SYNOPSIS      
-	 This cmdlet reports Call statistics from Ribbon SBC.
+      .SYNOPSIS      
+      This cmdlet reports Call statistics from Ribbon SBC.
 	 
-	.DESCRIPTION
-	 This cmdlet report Call statistics (global level only) from Ribbon SBC eg: Calls failed, Calls Succeeded, Call Currently Up, etc.
+      .DESCRIPTION
+      This cmdlet report Call statistics (global level only) from Ribbon SBC eg: Calls failed, Calls Succeeded, Call Currently Up, etc.
 	
-	.EXAMPLE
-	get-uxsystemcallstats
+      .EXAMPLE
+      Get-UxSystemCallStats
     
-    .EXAMPLE
-    $Creds = Get-credential
+      .EXAMPLE
+      $Creds = Get-Credential
     
-    PS:>$Obj = connect-uxgateway -uxhostname lyncsbc01.COMPANY.co.uk -Credentials $Creds
+      PS:> $Obj = (Connect-UxGateway -UxHostname lyncsbc01.COMPANY.co.uk -Credentials $Creds)
     
-    PS:>get-UxSystemCallStats -uxSession $obj
+      PS:> Get-UxSystemCallStats -uxSession $obj
 
-    This example stores the credential in a credential object and uses that credential to store a uxSession Object.
-    With this object we can now call the get-UxSystemCallStats for any session object. Therby allowing us to get call stats from
-    any amount of SBC's.
+      This example stores the credential in a credential object and uses that credential to store a uxSession Object.
+      With this object we can now call the get-UxSystemCallStats for any session object. Therby allowing us to get call stats from
+      any amount of SBC's.
 
-	#>
+  #>
     
     [cmdletbinding()]
     Param(
-        #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
+        #If using multiple servers you will need to pass the uxSession Object created by Connect-UxGateway
         #Else it will look for the last created session using the command above
         [Parameter(Mandatory = $false, Position = 0)]
         [PSCustomObject]$uxSession
@@ -276,27 +271,27 @@ Function Get-UxSystemCallStats {
 
 Function Get-UxSystemLog {
     <#
-	.SYNOPSIS      
-	 This cmdlet reports the call logging level for a specified SBC.
+      .SYNOPSIS      
+      This cmdlet reports the call logging level for a specified SBC.
 	 
-	.DESCRIPTION
-	 This cmdlet report Call statistics (global level only) from Ribbon SBC eg: Calls failed, Calls Succeeded, Call Currently Up, etc.
+      .DESCRIPTION
+      This cmdlet report Call statistics (global level only) from Ribbon SBC eg: Calls failed, Calls Succeeded, Call Currently Up, etc.
 	
-	.EXAMPLE
-	get-UxSystemLog
+      .EXAMPLE
+      get-UxSystemLog
     
-    .EXAMPLE
-    $Creds = Get-credential
+      .EXAMPLE
+      $Creds = Get-credential
 
-	PS:> $Obj = connect-uxgateway -uxhostname lyncsbc01.COMPANY.co.uk -Credentials $Creds
+      PS:> $Obj = Connect-UxGateway -UxHostname lyncsbc01.COMPANY.co.uk -Credentials $Creds
     
-    PS:> get-UxSystemLog -uxSession $Obj
+      PS:> get-UxSystemLog -uxSession $Obj
 
-	#>
+  #>
     
     [cmdletbinding()]
     Param(
-        #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
+        #If using multiple servers you will need to pass the uxSession Object created by Connect-UxGateway
         #Else it will look for the last created session using the command above
         [Parameter(Mandatory = $false, Position = 0)]
         [PSCustomObject]$uxSession
@@ -316,26 +311,26 @@ Function Get-UxSystemLog {
     
 }
 
-#Function to backup UX. When the backup succeeds there is no acknowledgement from UX.Best way to verify backup was successful is to check the backup file size
 Function Invoke-UxBackup {
     <#
-	.SYNOPSIS      
-	 This cmdlet performs backup of Ribbon SBC
+      .SYNOPSIS      
+      This cmdlet performs backup of Ribbon SBC
 	 
-	.DESCRIPTION
-	This cmdlet performs backup of Ribbon SBC.
-	Ensure to check the size of the backup file to verify the backup was successful as Ribbon does not acknowledge this.If a backup file is 1KB it means the backup was unsuccessful.
+      .DESCRIPTION
+      This cmdlet performs backup of Ribbon SBC.
+      Ensure to check the size of the backup file to verify the backup was successful as Ribbon does not acknowledge this.
+      If a backup file is 1KB it means the backup was unsuccessful.
 	
-	.PARAMETER backupdestination
-	Enter here the backup folder where the backup file will be copied. Ensure you have got write permissions on this folder.
+      .PARAMETER backupdestination
+      Enter here the backup folder where the backup file will be copied. Ensure you have got write permissions on this folder.
 	
-	.PARAMETER backupfilename
-	Enter here the Backup file name. The backup file will automatically be appended with .tar.gz extension.
+      .PARAMETER backupfilename
+      Enter here the Backup file name. The backup file will automatically be appended with .tar.gz extension.
 	
-	.EXAMPLE
-	invoke-uxbackup -backupfilename c:\backup\lyncgw01backup01.tar.gz
+      .EXAMPLE
+      invoke-uxbackup -backupfilename c:\backup\lyncgw01backup01.tar.gz
 	
-	#>
+  #>
     [cmdletbinding()]
     Param(
         [Parameter(Mandatory = $true, Position = 0)]
@@ -363,7 +358,7 @@ Function Invoke-UxBackup {
     Write-verbose "Response code from Gateway $ResponseCode"	
 
     if ($ResponseCode -ne "200") {
-        Throw "Session Expired or problem connecting to Box - Rerun Connect-uxGateway"
+        Throw "Session Expired or problem connecting to Box - Rerun Connect-UxGateway"
     }
 
     $args1 = ""
@@ -384,41 +379,40 @@ Function Invoke-UxBackup {
         Invoke-RestMethod -Uri $url -Method POST -Body $args1 -WebSession $sessionvar -OutFile $FileLocation -ErrorAction Stop
     }
     Catch {
-        throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_"
+        throw "Unable to process this command.Ensure you have connected to the gateway using `"Connect-UxGateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_"
     }
 }
 
-#Function to return any resource (using GET)
 Function Get-UxResource {
     <#
-	.SYNOPSIS      
-	 This cmdlet makes a GET request to any valid UX resource. For full list of valid resources refer to https://support.sonus.net/display/UXAPIDOC
+      .SYNOPSIS      
+      This cmdlet makes a GET request to any valid UX resource. For full list of valid resources refer to https://support.sonus.net/display/UXAPIDOC
 	 
-	.DESCRIPTION      
-	 This cmdlet makes a GET request to any valid UX resource. For full list of valid resources refer to https://support.sonus.net/display/UXAPIDOC.
-	 The cmdlet is one of the most powerful as you can query pretty much any UX resource which supports GET requests!
+      .DESCRIPTION      
+      This cmdlet makes a GET request to any valid UX resource. For full list of valid resources refer to https://support.sonus.net/display/UXAPIDOC.
+      The cmdlet is one of the most powerful as you can query pretty much any UX resource which supports GET requests!
 	 
-	.PARAMETER resource
-	Enter a valid resource name here. For valid resource names refer to https://support.sonus.net/display/UXAPIDOC
+      .PARAMETER resource
+      Enter a valid resource name here. For valid resource names refer to https://support.sonus.net/display/UXAPIDOC
 
-	.EXAMPLE
-	This example queries a "timing" resource 
+      .EXAMPLE
+      This example queries a "timing" resource 
 	
-	get-uxresource -resource timing
+      get-uxresource -resource timing
 
-	.EXAMPLE
-	This example queries a "certificate" resource 
+      .EXAMPLE
+      This example queries a "certificate" resource 
 	
-	get-uxresource -resource certificate
+      get-uxresource -resource certificate
 
-	After you know the certificate id URL using the above cmdlet, you can perform second query to find more details:
+      After you know the certificate id URL using the above cmdlet, you can perform second query to find more details:
 
-	get-uxresource -resource certificate/1
+      get-uxresource -resource certificate/1
 	
-	.LINK
-	To find all the resources which can be queried, please refer to https://support.sonus.net/display/UXAPIDOC
+      .LINK
+      To find all the resources which can be queried, please refer to https://support.sonus.net/display/UXAPIDOC
 	
-	#>
+  #>
 
     [cmdletbinding()]
     Param(
@@ -437,32 +431,32 @@ Function Get-UxResource {
 
     )
     <#
-    #Region Getting Session
-    if ($uxSession) {
+      #Region Getting Session
+      if ($uxSession) {
         $uxSessionObj = $uxSession
         $uxHost = $uxSession.host
         $SessionVar = $uxSession.Session
-    }
-    else {
+      }
+      else {
         if ($DefaultSession) {
             $uxSessionObj = $DefaultSession
             $uxHost = $DefaultSession.host
             $SessionVar = $DefaultSession.session
         }
         Else {
-            Throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity)."
+            Throw "Unable to process this command.Ensure you have connected to the gateway using `"Connect-UxGateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity)."
         }
-    }
-    #endregion
+      }
+      #endregion
 
-    #Region Refeshing the token, if needed
-    #$ResponseCode = $((get-uxsysteminfo -uxSession $uxSessionObj).status.http_code)
-    #Write-verbose "Response code from Gateway $ResponseCode"	
-    #
-    #if ($ResponseCode -ne "200") {
-    #   Throw "Session Expired or problem connecting to Box - Rerun Connect-uxGateway"
-    #}
-    #endregion
+      #Region Refeshing the token, if needed
+      #$ResponseCode = $((get-uxsysteminfo -uxSession $uxSessionObj).status.http_code)
+      #Write-verbose "Response code from Gateway $ResponseCode"	
+      #
+      #if ($ResponseCode -ne "200") {
+      #   Throw "Session Expired or problem connecting to Box - Rerun Connect-UxGateway"
+      #}
+      #endregion
     #>
 
     
@@ -486,7 +480,7 @@ Function Get-UxResource {
         Try {
             if ($uxSession.DefaultSessionType) {
                 Write-Warning "Session Expired - Trying to renew session to $($uxSession.host)"
-                Connect-UxGateway -uxhostname $DefaultSession.host -Credentials $DefaultSession.Credentials
+                Connect-UxGateway -UxHostname $DefaultSession.host -Credentials $DefaultSession.Credentials
                 if($($uxSession.ignoreCert) -and $($uxSession.pscore)){
                     $uxrawdata = Invoke-RestMethod -Uri $url -Method GET -WebSession $($uxSession.Session) -ErrorAction Stop -SkipCertificateCheck
                 }else{
@@ -506,8 +500,17 @@ Function Get-UxResource {
         }    
     }
 
-    $Result = ([xml]$($uxrawdata.trim())).root
-    #$Result = ([xml]$uxrawdata).root
+    #My implementation of PowerShell is throwing an error when using .trim() on an XML object. Something only in PSCore?
+    #Added a Try catch statement to use both methods for now. -James Arber
+    
+    Try
+    {
+      $Result = ([xml]$($uxrawdata.trim())).root
+    }
+    Catch
+    { 
+      $Result = ([xml]$uxrawdata).root
+    }
     $Success = $Result.status.http_code
 
     #Check if connection was successful.HTTP code 401 is returned which means the session has expired
@@ -516,7 +519,7 @@ Function Get-UxResource {
         Try {
             if ($uxSession.DefaultSessionType) {
                 Write-Warning "Session Expired - Trying to renew session to $($uxSession.host)"
-                Connect-UxGateway -uxhostname $DefaultSession.host -Credentials $DefaultSession.Credentials
+                Connect-UxGateway -UxHostname $DefaultSession.host -Credentials $DefaultSession.Credentials
                 if($($uxSession.ignoreCert) -and $($uxSession.pscore)){
                     $uxrawdata = Invoke-RestMethod -Uri $url -Method GET -WebSession $($uxSession.Session) -ErrorAction Stop -SkipCertificateCheck
                 }else{
@@ -528,7 +531,7 @@ Function Get-UxResource {
         }
         catch {
             #Unable to Login again
-            throw "We tried to reauthenticate and run your command again but failed, Try to rerun your command, OR use Connect-UxGateWay cmdlet again"
+            throw "We tried to reauthenticate and run your command again but failed, Try to rerun your command, OR use Connect-UxGateway cmdlet again"
         }
         $Result = ([xml]$($uxrawdata.trim())).root
         #$Result = ([xml]$uxrawdata).root
@@ -538,7 +541,7 @@ Function Get-UxResource {
     #Check if connection was successful.HTTP code 200 is returned
     If ( $Success -ne "200") {
         #Unable to Login
-        throw "Error Code $Success : Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_"
+        throw "Error Code $Success : Unable to process this command. Ensure you have connected to the gateway using `"Connect-UxGateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity). The error message is $_"
     }
     
     # Return data and raw data in the verbose stream if needed.
@@ -550,36 +553,35 @@ Function Get-UxResource {
    
 }	
 
-#Function to create a new resource on UX
 Function New-UxResource {
     <#
-	.SYNOPSIS      
-	 This cmdlet initiates a PUT request to create a new UX resource. For full list of valid resources refer to https://support.sonus.net/display/UXAPIDOC
+      .SYNOPSIS      
+      This cmdlet initiates a PUT request to create a new UX resource. For full list of valid resources refer to https://support.sonus.net/display/UXAPIDOC
 	 
-	.DESCRIPTION      
-	 This cmdlet  initiates a a PUT request to create a new UX resource. For full list of valid resources refer to https://support.sonus.net/display/UXAPIDOC.
-	 Using this cmdlet you can create any resource on UX which supports PUT request!
+      .DESCRIPTION      
+      This cmdlet  initiates a a PUT request to create a new UX resource. For full list of valid resources refer to https://support.sonus.net/display/UXAPIDOC.
+      Using this cmdlet you can create any resource on UX which supports PUT request!
 	 
-	.PARAMETER resource
-	Enter a valid resource name here. For valid resource names refer to https://support.sonus.net/display/UXAPIDOC
+      .PARAMETER resource
+      Enter a valid resource name here. For valid resource names refer to https://support.sonus.net/display/UXAPIDOC
 
-	.EXAMPLE
-	This example creates a new "sipservertable" resource 
+      .EXAMPLE
+      This example creates a new "sipservertable" resource 
 	
-	Grab the SIP Server table resource and next free available id
-	Get-UxResource -resource sipservertable | Select -ExpandProperty sipservertable_list | Select -ExpandProperty sipservertable_pk
+      Grab the SIP Server table resource and next free available id
+      Get-UxResource -resource sipservertable | Select -ExpandProperty sipservertable_list | Select -ExpandProperty sipservertable_pk
 	
-	Create new SIP server table and specify a free resource ID (15 here)
-    New-UxResource -Arguments "Description=SkypeMedServers" -resource sipservertable -index 15
+      Create new SIP server table and specify a free resource ID (15 here)
+      New-UxResource -Arguments "Description=SkypeMedServers" -resource sipservertable -index 15
     
-    OR 
+      OR 
 
-    New-UxResource -Arguments "Description=SkypeMedServers" -resource sipservertable/15
+      New-UxResource -Arguments "Description=SkypeMedServers" -resource sipservertable/15
 	
-	.LINK
-	To find all the resources which can be queried, please refer to https://support.sonus.net/display/UXAPIDOC
+      .LINK
+      To find all the resources which can be queried, please refer to https://support.sonus.net/display/UXAPIDOC
 	
-	#>
+  #>
     [cmdletbinding(SupportsShouldProcess = $True, ConfirmImpact = "High")]
     Param(
         # The Session Object used if wanting to connect to multiple servers
@@ -616,7 +618,7 @@ Function New-UxResource {
     #Write-verbose "Response code from Gateway $ResponseCode"	
     #
     #if ($ResponseCode -ne "200") {
-    #   Throw "Session Expired or problem connecting to Box - Rerun Connect-uxGateway"
+    #   Throw "Session Expired or problem connecting to Box - Rerun Connect-UxGateway"
     #}
     #endregion
 
@@ -639,12 +641,21 @@ Function New-UxResource {
         }
 	
         Catch {
-            throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_"
+            throw "Unable to process this command.Ensure you have connected to the gateway using `"Connect-UxGateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_"
         }
 	
     
-        $Result = ([xml]$($uxrawdata.trim())).root
-        #$Result = ([xml]$uxrawdata).root
+        #My implementation of PowerShell is throwing an error when using .trim() on an XML object. Something only in PSCore?
+        #Added a Try catch statement to use both methods for now. -James Arber
+    
+        Try
+        {
+          $Result = ([xml]$($uxrawdata.trim())).root
+        }
+        Catch
+        { 
+          $Result = ([xml]$uxrawdata).root
+        }
         $Success = $Result.status.http_code
         
         
@@ -652,7 +663,7 @@ Function New-UxResource {
             "200" { Write-Verbose "Happy with the response" }
             "401" { throw "Error creating the new entry, is there an existing record at $url? .The error message is $_" } 
             "500" { Write-Verbose -Message $uxrawdata; throw "Unable to create a new resource. Ensure you have entered a unique resource id.Verify this using `"get-uxresource`" cmdlet" }   
-            default { throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_" }
+            default { throw "Unable to process this command.Ensure you have connected to the gateway using `"Connect-UxGateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_" }
         }
 
 	
@@ -665,28 +676,27 @@ Function New-UxResource {
     }
 }	
 
-
 Function Send-UxCommand {
     <#
-	.SYNOPSIS      
-	 This cmdlet initates a POST request to send commands to the UX resource. For full list of valid resources refer to https://support.sonus.net/display/UXAPIDOC/Resource+-+system
+      .SYNOPSIS      
+      This cmdlet initates a POST request to send commands to the UX resource. For full list of valid resources refer to https://support.sonus.net/display/UXAPIDOC/Resource+-+system
 	 
-	.DESCRIPTION      
-	 This cmdlet initates a POST request to modify existing UX resource. For full list of valid resources refer to https://support.sonus.net/display/UXAPIDOC/Resource+-+system
+      .DESCRIPTION      
+      This cmdlet initates a POST request to modify existing UX resource. For full list of valid resources refer to https://support.sonus.net/display/UXAPIDOC/Resource+-+system
 	 
-	.PARAMETER resource
-	Enter a valid resource name here. For valid resource names refer to https://support.sonus.net/display/UXAPIDOC
+      .PARAMETER resource
+      Enter a valid resource name here. For valid resource names refer to https://support.sonus.net/display/UXAPIDOC
 
-    .EXAMPLE
-    Send-UxCommand -command reboot
+      .EXAMPLE
+      Send-UxCommand -command reboot
 
-.EXAMPLE
-    Send-UxCommand -command reboot -uxSession $1stGateway
+      .EXAMPLE
+      Send-UxCommand -command reboot -uxSession $1stGateway
 
-	.LINK
-	To find all the resources which can be queried, please refer to https://support.sonus.net/display/UXAPIDOC
+      .LINK
+      To find all the resources which can be queried, please refer to https://support.sonus.net/display/UXAPIDOC
 	
-	#>
+  #>
     
     [cmdletbinding(SupportsShouldProcess = $True, ConfirmImpact = "High")]
     Param(
@@ -718,7 +728,7 @@ Function Send-UxCommand {
     #Write-verbose "Response code from Gateway $ResponseCode"	
     #
     #if ($ResponseCode -ne "200") {
-    #   Throw "Session Expired or problem connecting to Box - Rerun Connect-uxGateway"
+    #   Throw "Session Expired or problem connecting to Box - Rerun Connect-UxGateway"
     #}
     #endregion
     if ($Command -eq "refreshadcache") {
@@ -754,7 +764,7 @@ Function Send-UxCommand {
         }
 	
         Catch {
-            throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_"
+            throw "Unable to process this command.Ensure you have connected to the gateway using `"Connect-UxGateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_"
         }
 	
     
@@ -766,7 +776,7 @@ Function Send-UxCommand {
             "200" { Write-Verbose "Happy with the response" }
             "401" { throw "Error creating the new entry, is there an existing record at $url? .The error message is $_" } 
             "500" { Write-Verbose -Message $uxrawdata; throw "Unable to create a new resource. Ensure you have entered a unique resource id.Verify this using `"get-uxresource`" cmdlet" }   
-            default { throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_" }
+            default { throw "Unable to process this command.Ensure you have connected to the gateway using `"Connect-UxGateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_" }
         }   
        
 	
@@ -779,48 +789,47 @@ Function Send-UxCommand {
     }
 }
 
-#Function to delete a resource on UX. 200OK is returned when a resource is deleted successfully. 500 if resource did not exist or couldn't delete it
 Function Remove-UxResource {
     <#
-	.SYNOPSIS      
-	 This cmdlet initates a DELETE request to remove a UX resource. For full list of valid resources refer to https://support.sonus.net/display/UXAPIDOC
+      .SYNOPSIS      
+      This cmdlet initates a DELETE request to remove a UX resource. For full list of valid resources refer to https://support.sonus.net/display/UXAPIDOC
 	 
-	.DESCRIPTION      
-	 Whilst primarily used by the internal functions, you can use this function with your own scripts. 
-     As this is likely to overwrite some of your SBC settings the ConfirmPreferences have been set to HIGH!
-     If you would like to prevent the confirm prompt use -confirm:$false when calling this function.
-     This can be dangerous if you are looping consider yourself WARNED. :-)
+      .DESCRIPTION      
+      Whilst primarily used by the internal functions, you can use this function with your own scripts. 
+      As this is likely to overwrite some of your SBC settings the ConfirmPreferences have been set to HIGH!
+      If you would like to prevent the confirm prompt use -confirm:$false when calling this function.
+      This can be dangerous if you are looping consider yourself WARNED. :-)
 
-	 You can delete any resource which supports DELETE request.
+      You can delete any resource which supports DELETE request.
 	 
-	.PARAMETER resource
-	Enter a valid resource name here. For valid resource names refer to https://support.sonus.net/display/UXAPIDOC
+      .PARAMETER resource
+      Enter a valid resource name here. For valid resource names refer to https://support.sonus.net/display/UXAPIDOC
 
-	.EXAMPLE
-	Extract the transformation table id of the table you want to delete
-	get-uxtransformationtable
+      .EXAMPLE
+      Extract the transformation table id of the table you want to delete
+      get-uxtransformationtable
 	
-	Now execute remove-uxresource cmdlet to delete the transformation table
-	remove-uxresource -resource transformationtable/13
+      Now execute remove-uxresource cmdlet to delete the transformation table
+      remove-uxresource -resource transformationtable/13
     
-    .EXAMPLE
-	Same as Above but if you are scripting it use -confirm:$false
-	get-uxtransformationtable
+      .EXAMPLE
+      Same as Above but if you are scripting it use -confirm:$false
+      get-uxtransformationtable
 	
-	Now execute remove-uxresource cmdlet to delete the transformation table
-	remove-uxresource -resource transformationtable/13 -confirm:$false
+      Now execute remove-uxresource cmdlet to delete the transformation table
+      remove-uxresource -resource transformationtable/13 -confirm:$false
 
-	.EXAMPLE
-	 Extract the SIP Server table resource and find the id of the table you want to delete
-	((get-uxresource -resource sipservertable).sipservertable_list).sipservertable_pk
+      .EXAMPLE
+      Extract the SIP Server table resource and find the id of the table you want to delete
+      ((get-uxresource -resource sipservertable).sipservertable_list).sipservertable_pk
 	
-	Now execute remove-uxresource cmdlet
-	remove-uxresource -resource sipservertable/10
+      Now execute remove-uxresource cmdlet
+      remove-uxresource -resource sipservertable/10
 	
-	.LINK
-	To find all the resources which can be queried, please refer to https://support.sonus.net/display/UXAPIDOC
+      .LINK
+      To find all the resources which can be queried, please refer to https://support.sonus.net/display/UXAPIDOC
 	
-	#>
+  #>
 
     [cmdletbinding(SupportsShouldProcess = $True, ConfirmImpact = "High")]
     Param(
@@ -869,7 +878,7 @@ Function Remove-UxResource {
         }
 	
         Catch {
-            throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_"
+            throw "Unable to process this command.Ensure you have connected to the gateway using `"Connect-UxGateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_"
         }
 	
     
@@ -882,7 +891,7 @@ Function Remove-UxResource {
             "200" { Write-Verbose "Happy with the response" }
             "401" { throw "Error creating the new entry, is there an existing record at $url? .The error message is $_" } 
             "500" { Write-Verbose -Message $uxrawdata; throw "Unable to create a new resource. Ensure you have entered a unique resource id.Verify this using `"get-uxresource`" cmdlet" }   
-            default { throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_" }
+            default { throw "Unable to process this command.Ensure you have connected to the gateway using `"Connect-UxGateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_" }
         }
 
 	
@@ -895,41 +904,40 @@ Function Remove-UxResource {
     }
 }		
 
-#Function to create a modify and existing resource on the UX
 Function Set-UxResource {
     <#
-	.SYNOPSIS      
-	 This cmdlet initates a POST request to modify existing UX resource. For full list of valid resources refer to https://support.sonus.net/display/UXAPIDOC
+      .SYNOPSIS      
+      This cmdlet initates a POST request to modify existing UX resource. For full list of valid resources refer to https://support.sonus.net/display/UXAPIDOC
 	 
-	.DESCRIPTION      
-     Whilst primarily used by the internal functions, you can use this function with your own scripts. 
-     As this is likely to overwrite some of your SBC settings the ConfirmPreferences have been set to HIGH!
-     If you would like to prevent the confirm prompt use -confirm:$false when calling this function.
-     This can be dangerous if you are looping consider yourself WARNED. :-)
+      .DESCRIPTION      
+      Whilst primarily used by the internal functions, you can use this function with your own scripts. 
+      As this is likely to overwrite some of your SBC settings the ConfirmPreferences have been set to HIGH!
+      If you would like to prevent the confirm prompt use -confirm:$false when calling this function.
+      This can be dangerous if you are looping consider yourself WARNED. :-)
 	 
-	.PARAMETER resource
-	Enter a valid resource name here. For valid resource names refer to https://support.sonus.net/display/UXAPIDOC
+      .PARAMETER resource
+      Enter a valid resource name here. For valid resource names refer to https://support.sonus.net/display/UXAPIDOC
 
-	.EXAMPLE
-	Assume you want to change the description of one of the SIPServer table.
-	Using Get find the ID of the sip server table
-	((get-uxresource -resource sipservertable).sipservertable_list).sipservertable_pk
+      .EXAMPLE
+      Assume you want to change the description of one of the SIPServer table.
+      Using Get find the ID of the sip server table
+      ((get-uxresource -resource sipservertable).sipservertable_list).sipservertable_pk
 	
-	Once you have found the ID, issue the cmdlet below to modify the description
-	set-uxresource -args Description=SBA2 -resource sipservertable/20
+      Once you have found the ID, issue the cmdlet below to modify the description
+      set-uxresource -args Description=SBA2 -resource sipservertable/20
 	
-	.EXAMPLE
-	Assume you want to change Description of the transformation table.
-	Extract the transformation table id of the table you want to modify
-	get-uxtransformationtable
+      .EXAMPLE
+      Assume you want to change Description of the transformation table.
+      Extract the transformation table id of the table you want to modify
+      get-uxtransformationtable
 	
-	Once you have found the ID, issue the cmdlet below to modify the description
-	set-uxresource -args "Description=Test5" -resource "transformationtable/12"
+      Once you have found the ID, issue the cmdlet below to modify the description
+      set-uxresource -args "Description=Test5" -resource "transformationtable/12"
 	
-	.LINK
-	To find all the resources which can be queried, please refer to https://support.sonus.net/display/UXAPIDOC
+      .LINK
+      To find all the resources which can be queried, please refer to https://support.sonus.net/display/UXAPIDOC
 	
-	#>
+  #>
 
     [cmdletbinding(SupportsShouldProcess = $True, ConfirmImpact = "High")]
     Param(
@@ -972,7 +980,7 @@ Function Set-UxResource {
         }
 	
         Catch {
-            throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_"
+            throw "Unable to process this command.Ensure you have connected to the gateway using `"Connect-UxGateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_"
         }
 	    
         $Result = ([xml]$($uxrawdata.trim())).root
@@ -983,7 +991,7 @@ Function Set-UxResource {
             "200" { Write-Verbose "Happy with the response" }
             "401" { throw "Error creating the new entry, is there an existing record at $url? .The error message is $_" } 
             "500" { Write-Verbose -Message $uxrawdata; throw "Unable to create a new resource. Ensure you have entered a unique resource id.Verify this using `"get-uxresource`" cmdlet" }   
-            default { throw "Unable to process this command.Ensure you have connected to the gateway using `"connect-uxgateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_" }
+            default { throw "Unable to process this command.Ensure you have connected to the gateway using `"Connect-UxGateway`" cmdlet or if you were already connected your session may have timed out (10 minutes of no activity).The error message is $_" }
         }
 	
         # Return data and raw data in the verbose stream if needed.
@@ -995,29 +1003,28 @@ Function Set-UxResource {
     }
 }	
 
-
 Function Get-UxTransformationTable {
 
     <#
-	.SYNOPSIS      
-	 This cmdlet reports The Transformation from Ribbon SBC.
+      .SYNOPSIS      
+      This cmdlet reports The Transformation tables from Ribbon SBC.
 	 
-	.DESCRIPTION
-	 TBC
+      .DESCRIPTION
+      TBC
 	
-	.EXAMPLE
-	get-uxtransformationtable
+      .EXAMPLE
+      Get-UxTransformationTable
     
-    .EXAMPLE
-    $Creds = Get-credential
-	$Obj = connect-uxgateway -uxhostname lyncsbc01.COMPANY.co.uk -Credentials $Creds
-	get-uxtransformationtable -uxSession $Obj
+      .EXAMPLE
+      $Creds = Get-credential
+      $Obj = Connect-UxGateway -UxHostname lyncsbc01.COMPANY.co.uk -Credentials $Creds
+      Get-UxTransformationTable -uxSession $Obj
 
-	#>
+  #>
     
     [cmdletbinding()]
     Param(
-        #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
+        #If using multiple servers you will need to pass the uxSession Object created by Connect-UxGateway
         #Else it will look for the last created session using the command above
         [Parameter(Mandatory = $false, Position = 1)]
         [PSCustomObject]$uxSession,
@@ -1077,31 +1084,31 @@ Function Get-UxTransformationTable {
 
 Function Copy-UxTransformationTables {
     <#
-	.SYNOPSIS      
-	 This Cmdlet will take a list of transformation tables from one SBC and Copy them to another
+      .SYNOPSIS      
+      This Cmdlet will take a list of transformation tables from one SBC and Copy them to another
 	 
-	.DESCRIPTION
-     Copying data from one SBC to another is tedious work, this cmdlet will take a list of transformation tables and will build them
-     on the destination SBC. To ensure we prevent unitntended results the rules will be disabled unless the -enabled switch is used.
+      .DESCRIPTION
+      Copying data from one SBC to another is tedious work, this cmdlet will take a list of transformation tables and will build them
+      on the destination SBC. To ensure we prevent unitntended results the rules will be disabled unless the -enabled switch is used.
 
-     The cmdlet will enumerate through the entries unless you use the -confirm:$false parameter
+      The cmdlet will enumerate through the entries unless you use the -confirm:$false parameter
 
-     Unless specified all entries will be marked as disabled when moved to other SBC. We will also update the description on the destination
-     SBC with a small tag which shows what the order they were in on the source AND the enabled status at time of copying.
+      Unless specified all entries will be marked as disabled when moved to other SBC. We will also update the description on the destination
+      SBC with a small tag which shows what the order they were in on the source AND the enabled status at time of copying.
 
-    .EXAMPLE
-    $SourceCreds = Get-Credential
+      .EXAMPLE
+      $SourceCreds = Get-Credential
     
-    PS:> $DestinationCreds = Get-Credential
+      PS:> $DestinationCreds = Get-Credential
     
-    PS:> $SourceGateWay = Connect-uxGateway -uxhostname 192.168.1.51 -credentials $SourceCreds
+      PS:> $SourceGateWay = Connect-UxGateway -UxHostname 192.168.1.51 -Credentials $SourceCreds
     
-    PS:> $DestinationGateway = Connect-uxGateway -uxhostname 192.168.1.52 -credentials $DestinationCreds
+      PS:> $DestinationGateway = Connect-UxGateway -UxHostname 192.168.1.52 -Credentials $DestinationCreds
     
-    PS:> Copy-UxTransformationTables -SourceSession $SourceGateWay -DestinationSession $DestinationGateway
+      PS:> Copy-UxTransformationTables -SourceSession $SourceGateWay -DestinationSession $DestinationGateway
     
 
-    This example is a basic copy all entries.
+      This example is a basic copy all entries.
     
     
     #>
@@ -1113,11 +1120,11 @@ Function Copy-UxTransformationTables {
         # This is the destination session See help how to create a session variable
         [Parameter(Mandatory = $true, Position = 1)]
         [PSCustomObject]$DestinationSession,
-        #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
+        #If using multiple servers you will need to pass the uxSession Object created by Connect-UxGateway
         #Else it will look for the last created session using the command above
         [Parameter(Mandatory = $false, Position = 2)]
         [int]$TableID,
-        #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
+        #If using multiple servers you will need to pass the uxSession Object created by Connect-UxGateway
         #Else it will look for the last created session using the command above
         [Parameter(Mandatory = $false, Position = 3)]
         [switch]$Enabled
@@ -1247,60 +1254,58 @@ Function Copy-UxTransformationTables {
 
 }
 
+#Broken function?
 <#
-Function Copy-UxTransformationEntry {
+    Function Copy-UxTransformationEntry {
     <#
-	.SYNOPSIS      
-	 This Cmdlet will take a list of transformation entry from one SBC and Copy them to another
+    .SYNOPSIS      
+    This Cmdlet will take a list of transformation entry from one SBC and Copy them to another
 	 
-	.DESCRIPTION
+    .DESCRIPTION
      Copying data from one SBC to another is tedious work, this cmdlet will take a list of transformation tables and will build them
      on the destination SBC. To ensure we prevent unitntended results the rules will be disabled unless the -enabled switch is used.
 
      The cmdlet will enumerate through the entries unless you use the -ALL parameter
 
-	.EXAMPLE
-	Copy-UxTransformationTables -SourceSession $SourceGateWay -DestinationSession $DestinationGateway
+    .EXAMPLE
+    Copy-UxTransformationTables -SourceSession $SourceGateWay -DestinationSession $DestinationGateway
     
     
     
     [cmdletbinding(SupportsShouldProcess = $True, ConfirmImpact = "High")]
     Param(
-        #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
+        #If using multiple servers you will need to pass the uxSession Object created by Connect-UxGateway
         #Else it will look for the last created session using the command above
         [Parameter(Mandatory = $true, Position = 0)]
         [PSCustomObject]$SourceSession,
-        #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
+        #If using multiple servers you will need to pass the uxSession Object created by Connect-UxGateway
         #Else it will look for the last created session using the command above
         [Parameter(Mandatory = $true, Position = 1)]
         [PSCustomObject]$DestinationSession,
-        #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
+        #If using multiple servers you will need to pass the uxSession Object created by Connect-UxGateway
         #Else it will look for the last created session using the command above
         [Parameter(Mandatory = $false, Position = 2)]
         [switch]$ALL,
-        #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
+        #If using multiple servers you will need to pass the uxSession Object created by Connect-UxGateway
         #Else it will look for the last created session using the command above
         [Parameter(Mandatory = $false, Position = 3)]
         [switch]$Enabled
     )
-}
+    }
 #>
-
-
-
 
 Function Get-UxOrderedList {
     <#
-	.SYNOPSIS      
-	 This cmdlet orders a list based on a sequence provided.
+      .SYNOPSIS      
+      This cmdlet orders a list based on a sequence provided.
 	 
-	.DESCRIPTION
-     This function is mainly used internally to get a list of entries and sort the list based on their parent's sequence.
-     We add a XML entry, called ListOrder to each Entry which the user can then sort upon using the following command
-     $Results | Sort Listorder
+      .DESCRIPTION
+      This function is mainly used internally to get a list of entries and sort the list based on their parent's sequence.
+      We add a XML entry, called ListOrder to each Entry which the user can then sort upon using the following command
+      $Results | Sort Listorder
 
-	.EXAMPLE
-	Get-UxOrderedList -Sequence $Seq -List $List
+      .EXAMPLE
+      Get-UxOrderedList -Sequence $Seq -List $List
     
     
     #>
@@ -1332,26 +1337,26 @@ Function Get-UxOrderedList {
 
 Function Get-UxTransformationEntry {
     <#
-	.SYNOPSIS      
-	 This cmdlet reports The Transformation from Ribbon SBC.
+      .SYNOPSIS      
+      This cmdlet reports The Transformation from Ribbon SBC.
 	 
-	.DESCRIPTION
-     Gets all the entries but in an unordered form. As the sequence is stored at the level above 
-     use get-UxTransformationTable 'TableID' to get ordered list as per sequence.
+      .DESCRIPTION
+      Gets all the entries but in an unordered form. As the sequence is stored at the level above 
+      use get-UxTransformationTable 'TableID' to get ordered list as per sequence.
 	
-	.EXAMPLE
-	get-uxtransformationEntry -uxTransformationTableId 4
+      .EXAMPLE
+      get-uxtransformationEntry -uxTransformationTableId 4
     
-    .EXAMPLE
-    $Creds = Get-credential
-	$Obj = connect-uxgateway -uxhostname lyncsbc01.COMPANY.co.uk -Credentials $Creds
-	get-uxtransformationtable -uxSession $Obj -uxTransformationTableId 4
+      .EXAMPLE
+      $Creds = Get-credential
+      $Obj = Connect-UxGateway -UxHostname lyncsbc01.COMPANY.co.uk -Credentials $Creds
+      Get-UxTransformationEntry -uxSession $Obj -uxTransformationTableId 4
 
-	#>
+  #>
     
     [cmdletbinding()]
     Param(
-        #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
+        #If using multiple servers you will need to pass the uxSession Object created by Connect-UxGateway
         #Else it will look for the last created session using the command above
         [Parameter(Mandatory = $false, Position = 1)]
         [PSCustomObject]$uxSession,
@@ -1381,22 +1386,22 @@ Function Get-UxTransformationEntry {
 
 Function New-UxTransformationTable {
     <#
-	.SYNOPSIS      
-	 This cmdlet creates a new transformation table (not transformation table entry)
+      .SYNOPSIS      
+      This cmdlet creates a new transformation table (not transformation table entry)
 	 
-	.DESCRIPTION
-	This cmdlet creates a transformation table (not transformation table entry).
+      .DESCRIPTION
+      This cmdlet creates a transformation table (not transformation table entry).
 	
-	.PARAMETER Description
-	Enter here the Description (Name) of the Transformation table.This is what will be displayed in the Ribbon GUI
+      .PARAMETER Description
+      Enter here the Description (Name) of the Transformation table.This is what will be displayed in the Ribbon GUI
 	
-	.EXAMPLE
-	 new-uxtransformationtable -Description "LyncToPBX"
+      .EXAMPLE
+      new-uxtransformationtable -Description "LyncToPBX"
 	
         #>
     [cmdletbinding(SupportsShouldProcess = $True, ConfirmImpact = "High")]
     Param(
-        #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
+        #If using multiple servers you will need to pass the uxSession Object created by Connect-UxGateway
         #Else it will look for the last created session using the command above
         [Parameter(Mandatory = $false, Position = 1)]
         [PSCustomObject]$uxSession,
@@ -1441,63 +1446,62 @@ Function New-UxTransformationTable {
 
 }
 
-#Function to create new transformation table entry
 Function New-UxTransformationEntry {
     <#
-	.SYNOPSIS      
-	 This cmdlet creates transformation entries in existing transformation table
+      .SYNOPSIS      
+      This cmdlet creates transformation entries in existing transformation table
 	 
-	.DESCRIPTION
-	This cmdlet creates transformation entries in existing transformation table.You need to specify the transformation table where these transformation entries should be created.
+      .DESCRIPTION
+      This cmdlet creates transformation entries in existing transformation table.You need to specify the transformation table where these transformation entries should be created.
 	
-	.PARAMETER TransformationTableId
-	Enter here the TransformationTableID of the transformation table where you want to add the transformation entry. This can be extracted using "get-uxtransformationtable" cmdlet
+      .PARAMETER TransformationTableId
+      Enter here the TransformationTableID of the transformation table where you want to add the transformation entry. This can be extracted using "get-uxtransformationtable" cmdlet
 	
-	.PARAMETER InputFieldType
-	Enter here the code (integer) of the Field you want to add, eg:If you want to add "CalledNumber" add 0. Full information on which codes maps to which field please refer http://bit.ly/SBC-TransfomationCodes
+      .PARAMETER InputFieldType
+      Enter here the code (integer) of the Field you want to add, eg:If you want to add "CalledNumber" add 0. Full information on which codes maps to which field please refer http://bit.ly/SBC-TransfomationCodes
 
-	.PARAMETER InputFieldValue
-	Enter the value which should be matched.eg: If you want to match all the numbers between 2400 - 2659 you would enter here "^(2([45]\d{2}|6[0-5]\d))$"
+      .PARAMETER InputFieldValue
+      Enter the value which should be matched.eg: If you want to match all the numbers between 2400 - 2659 you would enter here "^(2([45]\d{2}|6[0-5]\d))$"
 
-	.PARAMETER OutputFieldType
-	Enter here the code (integer) of the Field you want to add, eg:If you want to add "CalledNumber" add 0. Full information on which codes maps to which field please refer http://bit.ly/SBC-TransfomationCodes
+      .PARAMETER OutputFieldType
+      Enter here the code (integer) of the Field you want to add, eg:If you want to add "CalledNumber" add 0. Full information on which codes maps to which field please refer http://bit.ly/SBC-TransfomationCodes
 
-	.PARAMETER OutputFieldValue
-	Enter here the output of the Input value.eg: If you want to change input of "^(2([45]\d{2}|6[0-5]\d))$" to +44123456XXXX, you would enter here +44123456\1
+      .PARAMETER OutputFieldValue
+      Enter here the output of the Input value.eg: If you want to change input of "^(2([45]\d{2}|6[0-5]\d))$" to +44123456XXXX, you would enter here +44123456\1
 
-	.PARAMETER Description
-	Enter here the Description (Name) of the Transformation entry. This is what will be displayed in the Ribbon GUI
+      .PARAMETER Description
+      Enter here the Description (Name) of the Transformation entry. This is what will be displayed in the Ribbon GUI
 
-	.PARAMETER MatchType
-	Enter here if the Transformation entry you will create will be Mandatory(0) or Optional(1). If this parameter is not specified the transformation table will be created as Optional
+      .PARAMETER MatchType
+      Enter here if the Transformation entry you will create will be Mandatory(0) or Optional(1). If this parameter is not specified the transformation table will be created as Optional
 
-	.EXAMPLE
-	Assume you want to create a new transformation table.
-	First determine the ID of the transformation table in which you want to create the new transformation entry.
+      .EXAMPLE
+      Assume you want to create a new transformation table.
+      First determine the ID of the transformation table in which you want to create the new transformation entry.
 	
-	get-uxtransformationtable
+      get-uxtransformationtable
 
-	This example creates an Optional (default) transformation entry converting Called Number range  2400 - 2659  to Called Number +44123456XXXX
+      This example creates an Optional (default) transformation entry converting Called Number range  2400 - 2659  to Called Number +44123456XXXX
 	
-	new-uxtransformationentry -TransformationTableId 6 -InputFieldType 0 -InputFieldValue '^(2([45]\d{2}|6[0-5]\d))$' -OutputFieldType 0 -OutputFieldValue '+44123456\1' -Description "ExtToDDI"
+      new-uxtransformationentry -TransformationTableId 6 -InputFieldType 0 -InputFieldValue '^(2([45]\d{2}|6[0-5]\d))$' -OutputFieldType 0 -OutputFieldValue '+44123456\1' -Description "ExtToDDI"
 	
-	.EXAMPLE
-	This example creates an Optional transformation entry converting Calling Number beginning with 0044xxxxxx to Calling Number +44xxxxxx
+      .EXAMPLE
+      This example creates an Optional transformation entry converting Calling Number beginning with 0044xxxxxx to Calling Number +44xxxxxx
 	
-	new-uxtransformationentry -TransformationTableId 3 -InputFieldType 3 -InputFieldValue '00(44\d(.*))' -OutputFieldType 3 -OutputFieldValue '+\1' -Description "UKCLIToE164"
+      new-uxtransformationentry -TransformationTableId 3 -InputFieldType 3 -InputFieldValue '00(44\d(.*))' -OutputFieldType 3 -OutputFieldValue '+\1' -Description "UKCLIToE164"
 	
-	.EXAMPLE
-	This example creates a Mandatory CLI (Calling Number)passthrough
+      .EXAMPLE
+      This example creates a Mandatory CLI (Calling Number)passthrough
 	
-	new-uxtransformationentry -TransformationTableId 9 -InputFieldType 3 -InputFieldValue '(.*)' -OutputFieldType 3 -OutputFieldValue '\1' -Description "PassthroughCLI" -MatchType 0
+      new-uxtransformationentry -TransformationTableId 9 -InputFieldType 3 -InputFieldValue '(.*)' -OutputFieldType 3 -OutputFieldValue '\1' -Description "PassthroughCLI" -MatchType 0
 	
-	.LINK
-	For Input/Output Field Value Code mappings, please refer to http://bit.ly/SBC-TransfomationCodes
+      .LINK
+      For Input/Output Field Value Code mappings, please refer to http://bit.ly/SBC-TransfomationCodes
 	
-	#>
+  #>
     [cmdletbinding(SupportsShouldProcess = $True, ConfirmImpact = "High")]
     Param(
-        #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
+        #If using multiple servers you will need to pass the uxSession Object created by Connect-UxGateway
         #Else it will look for the last created session using the command above
         [Parameter(Mandatory = $false, Position = 0)]
         [PSCustomObject]$uxSession,
@@ -1577,28 +1581,27 @@ Function New-UxTransformationEntry {
 	
 }
 
-#Function to get sipserver table
 Function Get-UxSipServerTable {
     <#
-	.SYNOPSIS      
-	 This cmdlet displays all the sipserver table names and ID's
+      .SYNOPSIS      
+      This cmdlet displays all the sipserver table names and ID's
 	
-	.EXAMPLE
-	 get-uxsipservertable
+      .EXAMPLE
+      get-uxsipservertable
        
-    .EXAMPLE
-	 get-uxsipservertable 3
+      .EXAMPLE
+      get-uxsipservertable 3
 
-    .EXAMPLE
-    $Creds = Get-credential
-	$Obj = connect-uxgateway -uxhostname lyncsbc01.COMPANY.co.uk -Credentials $Creds
-	get-uxsipservertable -uxSession $Obj
+      .EXAMPLE
+      $Creds = Get-credential
+      $Obj = Connect-UxGateway -UxHostname lyncsbc01.COMPANY.co.uk -Credentials $Creds
+      Get-UxSipServerTable -uxSession $Obj
 
-	#>
+  #>
     
     [cmdletbinding()]
     Param(
-        #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
+        #If using multiple servers you will need to pass the uxSession Object created by Connect-UxGateway
         #Else it will look for the last created session using the command above
         [Parameter(Mandatory = $false, Position = 1)]
         [PSCustomObject]$uxSession,
@@ -1639,25 +1642,24 @@ Function Get-UxSipServerTable {
 
 }
 
-#Function to create new sipserver table
 Function New-UxSipServerTable {
     <#
-	.SYNOPSIS      
-	 This cmdlet creates a new sipserver table (not sipserver table entry)
+      .SYNOPSIS      
+      This cmdlet creates a new sipserver table (not sipserver table entry)
 	 
-	.DESCRIPTION
-	This cmdlet creates a sipserver table (not sipserver table entry).
+      .DESCRIPTION
+      This cmdlet creates a sipserver table (not sipserver table entry).
 	
-	.PARAMETER Description
-	Enter here the Description (Name) of the sipserver table.This is what will be displayed in the Ribbon GUI
+      .PARAMETER Description
+      Enter here the Description (Name) of the sipserver table.This is what will be displayed in the Ribbon GUI
 	
-	.EXAMPLE
-	 new-uxsipservertable -Description "LyncToPBX"
+      .EXAMPLE
+      New-UxSipServerTable -Description "LyncToPBX"
 	
-	#>
+  #>
     [cmdletbinding(SupportsShouldProcess = $True, ConfirmImpact = "High")]
     Param(
-        #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
+        #If using multiple servers you will need to pass the uxSession Object created by Connect-UxGateway
         #Else it will look for the last created session using the command above
         [Parameter(Mandatory = $false, Position = 1)]
         [PSCustomObject]$uxSession,
@@ -1702,83 +1704,82 @@ Function New-UxSipServerTable {
 
 }
 
-#Function to create new sipserver entry
 Function New-UxSipServerEntry {
     <#
-	.SYNOPSIS      
-	 This cmdlet creates a new host/domain in existing sipserver table
+      .SYNOPSIS      
+      This cmdlet creates a new host/domain in existing sipserver table
 	 
-	.DESCRIPTION
-	This cmdlet creates a new host in an existing sipserver table.You need to specify the sipserver table where these transformation entries should be created.
+      .DESCRIPTION
+      This cmdlet creates a new host in an existing sipserver table.You need to specify the sipserver table where these transformation entries should be created.
 	
-	.PARAMETER SipServerTableId
-	Enter here the SIPServer ID of the sipserver table where you want to add a new host entry. This can be extracted using "get-uxsipservertable" cmdlet
+      .PARAMETER SipServerTableId
+      Enter here the SIPServer ID of the sipserver table where you want to add a new host entry. This can be extracted using "get-uxsipservertable" cmdlet
 
-	.PARAMETER ServerLookup
-	Enter here the SIPServer ID of the sipserver table where you want to add a new host entry. This can be extracted using "get-uxsipservertable" cmdlet
+      .PARAMETER ServerLookup
+      Enter here the SIPServer ID of the sipserver table where you want to add a new host entry. This can be extracted using "get-uxsipservertable" cmdlet
 	
-	.PARAMETER Priority
-	Enter here the code (integer) of the Field you want to add, eg:If you want to add "CalledNumber" add 0. Full information on which codes maps to which field please refer http://bit.ly/Iy7JQS
+      .PARAMETER Priority
+      Enter here the code (integer) of the Field you want to add, eg:If you want to add "CalledNumber" add 0. Full information on which codes maps to which field please refer http://bit.ly/Iy7JQS
 
-	.PARAMETER Host
-	Enter the value which should be matched.eg: If you want to match all the numbers between 2400 - 2659 you would enter here "^(2([45]\d{2}|6[0-5]\d))$"
+      .PARAMETER Host
+      Enter the value which should be matched.eg: If you want to match all the numbers between 2400 - 2659 you would enter here "^(2([45]\d{2}|6[0-5]\d))$"
 
-	.PARAMETER HostIpVersion
-	Enter here the code (integer) of the Field you want to add, eg:If you want to add "CalledNumber" add 0. Full information on which codes maps to which field please refer http://bit.ly/Iy7JQS
+      .PARAMETER HostIpVersion
+      Enter here the code (integer) of the Field you want to add, eg:If you want to add "CalledNumber" add 0. Full information on which codes maps to which field please refer http://bit.ly/Iy7JQS
 
-	.PARAMETER Port
-	Enter here the output of the Input value.eg: If you want to change input of "^(2([45]\d{2}|6[0-5]\d))$" to +44123456XXXX, you would enter here +44123456\1
+      .PARAMETER Port
+      Enter here the output of the Input value.eg: If you want to change input of "^(2([45]\d{2}|6[0-5]\d))$" to +44123456XXXX, you would enter here +44123456\1
 
-	.PARAMETER Protocol
-	Enter here the Description (Name) of the Transformation entry. This is what will be displayed in the Ribbon GUI
+      .PARAMETER Protocol
+      Enter here the Description (Name) of the Transformation entry. This is what will be displayed in the Ribbon GUI
 
-	.PARAMETER TLSProfile
-	Enter here if the Transformation entry you will create will be Mandatory(0) or Optional(1). If this parameter is not specified the transformation table will be created as Optional
+      .PARAMETER TLSProfile
+      Enter here if the Transformation entry you will create will be Mandatory(0) or Optional(1). If this parameter is not specified the transformation table will be created as Optional
 
-	.PARAMETER KeepAliveFrequency
-	Enter here if the Transformation entry you will create will be Mandatory(0) or Optional(1). If this parameter is not specified the transformation table will be created as Optional
+      .PARAMETER KeepAliveFrequency
+      Enter here if the Transformation entry you will create will be Mandatory(0) or Optional(1). If this parameter is not specified the transformation table will be created as Optional
 
-	.PARAMETER RecoverFrequency
-	Enter here if the Transformation entry you will create will be Mandatory(0) or Optional(1). If this parameter is not specified the transformation table will be created as Optional
+      .PARAMETER RecoverFrequency
+      Enter here if the Transformation entry you will create will be Mandatory(0) or Optional(1). If this parameter is not specified the transformation table will be created as Optional
 
-	.PARAMETER LocalUserName
-	Enter here if the Transformation entry you will create will be Mandatory(0) or Optional(1). If this parameter is not specified the transformation table will be created as Optional
+      .PARAMETER LocalUserName
+      Enter here if the Transformation entry you will create will be Mandatory(0) or Optional(1). If this parameter is not specified the transformation table will be created as Optional
 
-	.PARAMETER PeerUserName
-	Enter here if the Transformation entry you will create will be Mandatory(0) or Optional(1). If this parameter is not specified the transformation table will be created as Optional
+      .PARAMETER PeerUserName
+      Enter here if the Transformation entry you will create will be Mandatory(0) or Optional(1). If this parameter is not specified the transformation table will be created as Optional
 
-	.PARAMETER RemoteAuthorizationTable
-	Enter here if the Transformation entry you will create will be Mandatory(0) or Optional(1). If this parameter is not specified the transformation table will be created as Optional
+      .PARAMETER RemoteAuthorizationTable
+      Enter here if the Transformation entry you will create will be Mandatory(0) or Optional(1). If this parameter is not specified the transformation table will be created as Optional
 
-	.PARAMETER ContactRegistrantTable
-	Enter here if the Transformation entry you will create will be Mandatory(0) or Optional(1). If this parameter is not specified the transformation table will be created as Optional
+      .PARAMETER ContactRegistrantTable
+      Enter here if the Transformation entry you will create will be Mandatory(0) or Optional(1). If this parameter is not specified the transformation table will be created as Optional
 
-	.PARAMETER SessionURIValidation
-	Enter here if the Transformation entry you will create will be Mandatory(0) or Optional(1). If this parameter is not specified the transformation table will be created as Optional
+      .PARAMETER SessionURIValidation
+      Enter here if the Transformation entry you will create will be Mandatory(0) or Optional(1). If this parameter is not specified the transformation table will be created as Optional
 
-	.PARAMETER ReuseTransport
-	Enter here if the Transformation entry you will create will be Mandatory(0) or Optional(1). If this parameter is not specified the transformation table will be created as Optional
+      .PARAMETER ReuseTransport
+      Enter here if the Transformation entry you will create will be Mandatory(0) or Optional(1). If this parameter is not specified the transformation table will be created as Optional
 
-	.PARAMETER TransportSocket
-	Enter here if the Transformation entry you will create will be Mandatory(0) or Optional(1). If this parameter is not specified the transformation table will be created as Optional
+      .PARAMETER TransportSocket
+      Enter here if the Transformation entry you will create will be Mandatory(0) or Optional(1). If this parameter is not specified the transformation table will be created as Optional
 
-	.PARAMETER ReuseTimeout
-	Enter here if the Transformation entry you will create will be Mandatory(0) or Optional(1). If this parameter is not specified the transformation table will be created as Optional
+      .PARAMETER ReuseTimeout
+      Enter here if the Transformation entry you will create will be Mandatory(0) or Optional(1). If this parameter is not specified the transformation table will be created as Optional
 
 
-	.EXAMPLE
+      .EXAMPLE
 	
-	.EXAMPLE
+      .EXAMPLE
 	
-	.EXAMPLE
+      .EXAMPLE
 	
-	.LINK
+      .LINK
 	
 	
-	#>
+  #>
     [cmdletbinding(SupportsShouldProcess = $True, ConfirmImpact = "High")]
     Param(
-        #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
+        #If using multiple servers you will need to pass the uxSession Object created by Connect-UxGateway
         #Else it will look for the last created session using the command above
         [Parameter(Mandatory = $false, Position = 28)]
         [PSCustomObject]$uxSession,
@@ -1854,7 +1855,7 @@ Function New-UxSipServerEntry {
         #- Send message using TLS.
         [Parameter(Mandatory = $true, Position = 12)]
         [validateRange(0, 9)]
-        [int]$Protocol = 1,
+        [int]$Protocol,
 
         # Specifies the method to monitor server None 
         #- no monitoring of this server occurs 
@@ -1891,7 +1892,7 @@ Function New-UxSipServerEntry {
         # Specifies the priority of this server. The priority is used to order the server when more than 1 is configured.
         [Parameter(Mandatory = $true, Position = 18)]
         [validateRange(0, 16)]
-        [int]$Priority = 0,
+        [int]$Priority,
 
         # Specifies a Remote Authorization table for this SIP Server, from a list of authorization tables defined in the Remote Authorization Tables. The Remote Authorization table is used by a Signaling group when a challenge (401/407) is issued by the server. The table contains a realm, user name, and password. There are used to provide credentials to he server issuing the challenge.
         [Parameter(Mandatory = $false, Position = 19)]
@@ -2109,7 +2110,7 @@ Function New-UxCallRoutingEntry {
             #>
     [cmdletbinding(SupportsShouldProcess = $True, ConfirmImpact = "High")]
     Param(
-        #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
+        #If using multiple servers you will need to pass the uxSession Object created by Connect-UxGateway
         #Else it will look for the last created session using the command above
         [Parameter(Mandatory = $false, Position = 20)]
         [PSCustomObject]$uxSession,
@@ -2309,13 +2310,12 @@ Function New-UxCallRoutingEntry {
 
 }
 
-
 Function Get-uxTableToParameter {
     <#
-    .SYNOPSIS      
+      .SYNOPSIS      
         A small helper function which parses the Ribbon Wiki to create a list of parameters ( This will only work on powershell version 5 and below)
         
-    .DESCRIPTION
+      .DESCRIPTION
         Creating a parameter list is a pain in the ass, so i created a small function that will query the wiki and copy a parameter list to the clip board
         Just pass the wiki page you want it to create a parameter list from
 
@@ -2390,25 +2390,24 @@ Function Get-uxTableToParameter {
         
 }
 
-
 Function New-UxCallRoutingTable {
     <#
-	.SYNOPSIS      
-	 This cmdlet creates a new Call Routing Table (not routing table entry)
+      .SYNOPSIS      
+      This cmdlet creates a new Call Routing Table (not routing table entry)
 	 
-	.DESCRIPTION
-	This cmdlet creates a new Call Routing Table (not routing table entry)
+      .DESCRIPTION
+      This cmdlet creates a new Call Routing Table (not routing table entry)
 	
-	.PARAMETER Description
-	Enter here the Description (Name) of the Call Routing table.This is what will be displayed in the Ribbon GUI
+      .PARAMETER Description
+      Enter here the Description (Name) of the Call Routing table.This is what will be displayed in the Ribbon GUI
 	
-	.EXAMPLE
-	 new-UxCallRoutingTable -Description "LyncToPBX"
+      .EXAMPLE
+      new-UxCallRoutingTable -Description "LyncToPBX"
 	
         #>
     [cmdletbinding(SupportsShouldProcess = $True, ConfirmImpact = "High")]
     Param(
-        #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
+        #If using multiple servers you will need to pass the uxSession Object created by Connect-UxGateway
         #Else it will look for the last created session using the command above
         [Parameter(Mandatory = $false, Position = 1)]
         [PSCustomObject]$uxSession,
@@ -2455,22 +2454,22 @@ Function New-UxCallRoutingTable {
 
 Function Get-UxCallRoutingTable {
     <#
-	.SYNOPSIS      
-	 This cmdlet displays all the sipprofile names and ID's
+      .SYNOPSIS      
+      This cmdlet displays all the sipprofile names and ID's
 
-    .EXAMPLE
-	 get-UxSipProfile
+      .EXAMPLE
+      get-UxSipProfile
 	   
-    .EXAMPLE
-    $Creds = Get-credential
-	$Obj = connect-uxgateway -uxhostname lyncsbc01.COMPANY.co.uk -Credentials $Creds
-	get-UxSipProfile -uxSession $Obj
+      .EXAMPLE
+      $Creds = Get-credential
+      $Obj = Connect-UxGateway -UxHostname lyncsbc01.COMPANY.co.uk -Credentials $Creds
+      get-UxSipProfile -uxSession $Obj
 
-	#>
+  #>
     
     [cmdletbinding()]
     Param(
-        #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
+        #If using multiple servers you will need to pass the uxSession Object created by Connect-UxGateway
         #Else it will look for the last created session using the command above
         [Parameter(Mandatory = $false, Position = 1)]
         [PSCustomObject]$uxSession,
@@ -2521,22 +2520,22 @@ Function Get-UxCallRoutingTable {
 
 Function Get-UxReRouteTable {
     <#
-	.SYNOPSIS      
-	 This cmdlet displays all the sipprofile names and ID's
+      .SYNOPSIS      
+      This cmdlet displays all the sipprofile names and ID's
 
-    .EXAMPLE
-	 get-UxSipProfile
+      .EXAMPLE
+      get-UxSipProfile
 	   
-    .EXAMPLE
-    $Creds = Get-credential
-	$Obj = connect-uxgateway -uxhostname lyncsbc01.COMPANY.co.uk -Credentials $Creds
-	get-UxSipProfile -uxSession $Obj
+      .EXAMPLE
+      $Creds = Get-credential
+      $Obj = Connect-UxGateway -UxHostname lyncsbc01.COMPANY.co.uk -Credentials $Creds
+      get-UxSipProfile -uxSession $Obj
 
-	#>
+  #>
     
     [cmdletbinding()]
     Param(
-        #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
+        #If using multiple servers you will need to pass the uxSession Object created by Connect-UxGateway
         #Else it will look for the last created session using the command above
         [Parameter(Mandatory = $false, Position = 1)]
         [PSCustomObject]$uxSession,
@@ -2585,29 +2584,28 @@ Function Get-UxReRouteTable {
  
 }
 
-
 Function Get-UxCallRoutingEntry {
     <#
-	.SYNOPSIS      
-	 This cmdlet reports The Transformation from Ribbon SBC.
+      .SYNOPSIS      
+      This cmdlet reports The Transformation from Ribbon SBC.
 	 
-	.DESCRIPTION
-     Gets all the entries but in an unordered form. As the sequence is stored at the level above 
-     use get-UxTransformationTable 'TableID' to get ordered list as per sequence.
+      .DESCRIPTION
+      Gets all the entries but in an unordered form. As the sequence is stored at the level above 
+      use get-UxTransformationTable 'TableID' to get ordered list as per sequence.
 	
-	.EXAMPLE
-	get-uxtransformationEntry -uxTransformationTableId 4
+      .EXAMPLE
+      get-uxtransformationEntry -uxTransformationTableId 4
     
-    .EXAMPLE
-    $Creds = Get-credential
-	$Obj = connect-uxgateway -uxhostname lyncsbc01.COMPANY.co.uk -Credentials $Creds
-	get-uxtransformationtable -uxSession $Obj -uxTransformationTableId 4
+      .EXAMPLE
+      $Creds = Get-credential
+      $Obj = Connect-UxGateway -UxHostname lyncsbc01.COMPANY.co.uk -Credentials $Creds
+      get-uxtransformationtable -uxSession $Obj -uxTransformationTableId 4
 
-	#>
+  #>
     
     [cmdletbinding()]
     Param(
-        #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
+        #If using multiple servers you will need to pass the uxSession Object created by Connect-UxGateway
         #Else it will look for the last created session using the command above
         [Parameter(Mandatory = $false, Position = 1)]
         [PSCustomObject]$uxSession,
@@ -2635,29 +2633,24 @@ Function Get-UxCallRoutingEntry {
     
 }
 
-
-
-
-
-#Function to get sipprofile
 Function Get-UxSipProfile {
     <#
-	.SYNOPSIS      
-	 This cmdlet displays all the sipprofile names and ID's
+      .SYNOPSIS      
+      This cmdlet displays all the sipprofile names and ID's
 
-    .EXAMPLE
-	 get-UxSipProfile
+      .EXAMPLE
+      get-UxSipProfile
 	   
-    .EXAMPLE
-    $Creds = Get-credential
-	$Obj = connect-uxgateway -uxhostname lyncsbc01.COMPANY.co.uk -Credentials $Creds
-	get-UxSipProfile -uxSession $Obj
+      .EXAMPLE
+      $Creds = Get-credential
+      $Obj = Connect-UxGateway -UxHostname lyncsbc01.COMPANY.co.uk -Credentials $Creds
+      get-UxSipProfile -uxSession $Obj
 
-	#>
+  #>
     
     [cmdletbinding()]
     Param(
-        #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
+        #If using multiple servers you will need to pass the uxSession Object created by Connect-UxGateway
         #Else it will look for the last created session using the command above
         [Parameter(Mandatory = $false, Position = 1)]
         [PSCustomObject]$uxSession,
@@ -2691,27 +2684,26 @@ Function Get-UxSipProfile {
  
 }
 
-#Function to get sipserver table entries from a specified sipserver table
 Function Get-UxSipServerTableEntry {
     <#
-	.SYNOPSIS      
-	 This cmdlet displays the sipserver table entries of a specified sipserver table.
+      .SYNOPSIS      
+      This cmdlet displays the sipserver table entries of a specified sipserver table.
 	 
-	.DESCRIPTION
-	This cmdlet displays the sipserver table entries if a sipserver table id is specified. To extract the sipserver table id execute "get-uxsipservertable" cmdlet
-	The output of the cmdlet contains InputField/OutputFields which are displayed as integer. To map the numbers to friendly names refer: bit.ly/Iy7JQS
+      .DESCRIPTION
+      This cmdlet displays the sipserver table entries if a sipserver table id is specified. To extract the sipserver table id execute "get-uxsipservertable" cmdlet
+      The output of the cmdlet contains InputField/OutputFields which are displayed as integer. To map the numbers to friendly names refer: bit.ly/Iy7JQS
 	
-	.PARAMETER uxsipservertableid
-	Enter here the sipserver table id of the sipserver table.To extract the sipserver table id execute "get-uxsipservertable" cmdlet
+      .PARAMETER uxsipservertableid
+      Enter here the sipserver table id of the sipserver table.To extract the sipserver table id execute "get-uxsipservertable" cmdlet
 	
-	.EXAMPLE
-	 get-uxsipservertableentry -uxsipservertableid 4
+      .EXAMPLE
+      get-uxsipservertableentry -uxsipservertableid 4
 	
     #>
     
     [cmdletbinding()]
     Param(
-        #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
+        #If using multiple servers you will need to pass the uxSession Object created by Connect-UxGateway
         #Else it will look for the last created session using the command above
         [Parameter(Mandatory = $false, Position = 1)]
         [PSCustomObject]$uxSession,
@@ -2743,22 +2735,22 @@ Function Get-UxSipServerTableEntry {
 
 Function New-UxSipProfile {
     <#
-	.SYNOPSIS      
-	 This cmdlet creates a new sip profile (not sipserver table entry)
+      .SYNOPSIS      
+      This cmdlet creates a new sip profile (not sipserver table entry)
 	 
-	.DESCRIPTION
-	This cmdlet creates a sip profile (not sipserver table entry).
+      .DESCRIPTION
+      This cmdlet creates a sip profile (not sipserver table entry).
 	
-	.PARAMETER Description
-	Enter here the Description (Name) of the sipserver table.This is what will be displayed in the Ribbon GUI
+      .PARAMETER Description
+      Enter here the Description (Name) of the sipserver table.This is what will be displayed in the Ribbon GUI
 	
-	.EXAMPLE
-	 new-uxsipservertable -Description "LyncToPBX"
+      .EXAMPLE
+      new-uxsipservertable -Description "LyncToPBX"
 	
-	#>
+  #>
     [cmdletbinding(SupportsShouldProcess = $True, ConfirmImpact = "High")]
     Param(
-        #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
+        #If using multiple servers you will need to pass the uxSession Object created by Connect-UxGateway
         #Else it will look for the last created session using the command above
         [Parameter(Mandatory = $false, Position = 0)]
         [PSCustomObject]$uxSession,
@@ -2826,39 +2818,38 @@ Function New-UxSipProfile {
 
 }
 
-#Function to get signalgroup
 Function Get-UxSignalGroup {
     <#
-	.SYNOPSIS      
-	    This cmdlet displays all the signalgroup names and ID's
+      .SYNOPSIS      
+      This cmdlet displays all the signalgroup names and ID's
     
-    .DESCRIPTION
+      .DESCRIPTION
         This cmdlet can be used to pull either the how signalling group or an individual entry by passing the signaling group id.
 
-	.EXAMPLE
+      .EXAMPLE
         get-UxSignalGroup
 
         This pulls all the signaling groups from the last connected box.
 
-    .EXAMPLE
+      .EXAMPLE
         get-UxSignalGroup 2
 
         This pulls the individual signal group.
 	   
-    .EXAMPLE
+      .EXAMPLE
         $Creds = Get-credential
 
-        PS C:\>$Obj = connect-uxgateway -uxhostname lyncsbc01.COMPANY.co.uk -Credentials $Creds
+        PS C:\>$Obj = Connect-UxGateway -UxHostname lyncsbc01.COMPANY.co.uk -Credentials $Creds
         
         PS C:\>get-UxSignalGroup -uxSession $Obj
 
         This Example uses the uxSession object to pull entries just from that session rather than the last default session.
 
-	#>
+  #>
     
     [cmdletbinding()]
     Param(
-        #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
+        #If using multiple servers you will need to pass the uxSession Object created by Connect-UxGateway
         #Else it will look for the last created session using the command above
         [Parameter(Mandatory = $false, Position = 1)]
         [PSCustomObject]$uxSession,
@@ -2916,23 +2907,21 @@ Function New-UxURLandPSObject {
 
 }
 
-
-#Function to create new signalgroup
 Function New-UxSignalGroup {
     <#
-	.SYNOPSIS      
-	 This cmdlet creates a new signalgroup
+      .SYNOPSIS      
+      This cmdlet creates a new signalgroup
 	 
-	.DESCRIPTION
-	This cmdlet creates a sip new signalgroup
+      .DESCRIPTION
+      This cmdlet creates a sip new signalgroup
 	
-	.PARAMETER Description
-	Enter here the Description (Name) of the sipserver table.This is what will be displayed in the Ribbon GUI
+      .PARAMETER Description
+      Enter here the Description (Name) of the sipserver table.This is what will be displayed in the Ribbon GUI
 	
-	.EXAMPLE
-	 new-uxsignalgroup -Description "LyncToPBX"
+      .EXAMPLE
+      new-uxsignalgroup -Description "LyncToPBX"
 	
-	#>
+  #>
     [cmdletbinding(SupportsShouldProcess = $True, ConfirmImpact = "High")]
     Param(
         [Parameter(Mandatory = $false, Position = 20)]
@@ -2956,7 +2945,7 @@ Function New-UxSignalGroup {
 
         [Parameter(Mandatory = $true, Position = 2, HelpMessage = 'Specifies the number of SIP channels available for call')]
         [ValidateRange(1, 960)]
-        [int]$Channels = 10 ,
+        [int]$Channels ,
 
         [Parameter(Mandatory = $true, Position = 3, HelpMessage = 'Specifies the Media List to be used by this Signaling Group')]
         [ValidateRange(1, 65534)]
@@ -3023,27 +3012,27 @@ Function New-UxSignalGroup {
     $ICEMode = 0
     $InboundNATTraversalDetection = 0
     <#
-    #Default for non required parameters
-    $ServerSelection = 0
-    $RelOnQckConnectTimer = 1000
-    $ToneTableID = 0
-    $ActionSetTableID = 0
-    $RingBack = 0
-    $Direction = 2
-    $PlayCongestionTone = 0
-    $Early183 = 0
-    $AllowRefreshSDP = 1
-    $OutboundProxy = ""
-    $OutboundProxyPort = 5060
-    $NoChannelAvailableId = 34
-    $TimerSanitySetup = 180000
-    $TimerCallProceeding = 180000
-    $ChallengeRequest = 0
-    $NotifyCACProfile = 0
-    $NonceLifetime = 600
-    $Monitor = 2
-    $AuthorizationRealm = ""
-#>
+      #Default for non required parameters
+      $ServerSelection = 0
+      $RelOnQckConnectTimer = 1000
+      $ToneTableID = 0
+      $ActionSetTableID = 0
+      $RingBack = 0
+      $Direction = 2
+      $PlayCongestionTone = 0
+      $Early183 = 0
+      $AllowRefreshSDP = 1
+      $OutboundProxy = ""
+      $OutboundProxyPort = 5060
+      $NoChannelAvailableId = 34
+      $TimerSanitySetup = 180000
+      $TimerCallProceeding = 180000
+      $ChallengeRequest = 0
+      $NotifyCACProfile = 0
+      $NonceLifetime = 600
+      $Monitor = 2
+      $AuthorizationRealm = ""
+  #>
 
 
     #Signalling ID Parameters
@@ -3094,23 +3083,22 @@ Function New-UxSignalGroup {
     Write-Output $return
 }
 
-#Function to restartUX
 Function Restart-UxGateway {
     <#
-	.SYNOPSIS      
-	 This cmdlet restarts Ribbon gateway
+      .SYNOPSIS      
+      This cmdlet restarts Ribbon gateway
 	 
-	.SYNOPSIS      
-	This cmdlet restarts Ribbon gateway
+      .SYNOPSIS      
+      This cmdlet restarts Ribbon gateway
 	
-	.EXAMPLE
-	 restart-uxgateway
+      .EXAMPLE
+      restart-uxgateway
 	
-	#>
+  #>
 
     [cmdletbinding()]
     Param(
-        #If using multiple servers you will need to pass the uxSession Object created by connect-uxGateway
+        #If using multiple servers you will need to pass the uxSession Object created by Connect-UxGateway
         #Else it will look for the last created session using the command above
         [Parameter(Mandatory = $false, Position = 0)]
         [PSCustomObject]$uxSession = $DefaultSession
@@ -3120,5 +3108,139 @@ Function Restart-UxGateway {
     If ($status.http_code -eq "200") {
         Write-Output "Reboot initiated and completed succesfully" 
     }
+}
+
+Function Get-UxLocalRegistrarTable {
+    <#
+      .SYNOPSIS      
+      This cmdlet displays all the local registrar table names and ID's
+	
+      .EXAMPLE
+      Get-UxLocalRegistrarTable
+       
+      .EXAMPLE
+      Get-UxLocalRegistrarTable -uxLocalRegistrarTableId 3
+
+      .EXAMPLE
+      $Creds = Get-credential
+      $Obj = Connect-UxGateway -UxHostname lyncsbc01.COMPANY.co.uk -Credentials $Creds
+      Get-UxLocalRegistrarTable -uxSession $Obj
+
+  #>
+    
+    [cmdletbinding()]
+    Param(
+        #If using multiple servers you will need to pass the uxSession Object created by Connect-UxGateway
+        #Else it will look for the last created session using the command above
+        [Parameter(Mandatory = $false, Position = 1)]
+        [PSCustomObject]$uxSession,
+
+        [Parameter(Mandatory = $false, Position = 0)]
+        [PSCustomObject]$uxLocalRegistrarTableId
+         
+    )
+    Write-verbose "Called $($MyInvocation.MyCommand)"
+    #$resource = Get-UxResourceName -functionname $MyInvocation.MyCommand
+    
+    if ($uxLocalRegistrarTableId) {
+        $ResourceSplat = @{
+            resource      = "siplocalregistrartable/$uxLocalRegistrarTableId"
+            ReturnElement = "siplocalregistrartable"
+            Details       = $true
+        }
+    }
+    else {
+        $ResourceSplat = @{
+            resource      = "siplocalregistrartable"
+            ReturnElement = "siplocalregistrartable_list"
+            detail        = $true
+        }
+    }
+    if ($uxSession) { $ResourceSplat.uxSession = $uxSession }
+
+    #Further filtering of the object for this option - Here we want to see the whole details of the object.
+    $Return = get-uxresource @ResourceSplat
+    if ($uxLocalRegistrarTableId) {
+        Write-Output $return
+    }
+    else {
+        Write-Output $return.siplocalregistrartable
+    }
+
+
+}
+
+Function New-UxLocalRegistrarTable { #Todo, in progress
+    <#
+      .SYNOPSIS      
+      This cmdlet creates a new local registrar table (not registar table entry)
+	 
+      .DESCRIPTION
+      This cmdlet creates a new local registrar table, required for enabling local registar for things like SIP extensions, ATA's using SIP Register etc
+	
+      .PARAMETER uxSession
+      (Optional) Required when managing multiple SBCs, Pass the output PSCustom Object from Connect-UxGateway as a variable here depending on the managed SBC.
+
+      .PARAMETER Description
+      Enter here the Description (Name) of the local registrar table. This is what will be displayed in the Ribbon GUI
+
+      .PARAMETER MaxUsers
+      Define the maxmium amount of users that can registar to this registra table
+      Physical SBC's are limited to 1000 contacts, SWeLite supports upto 5000
+      (Note, your SBC licence limit still applies)
+	
+      .EXAMPLE
+      New-UxLocalRegistrarTable -Description "Sip Extensions" -MaxUsers "30"
+	
+  #>
+    [cmdletbinding(SupportsShouldProcess = $True, ConfirmImpact = "High")]
+    Param(
+        #If using multiple servers you will need to pass the uxSession Object created by Connect-UxGateway
+        #Else it will look for the last created session using the command above
+        [Parameter(Mandatory = $false, Position = 2)]
+        [PSCustomObject]$uxSession,
+        #Description of the new table
+        [Parameter(Mandatory = $true, Position = 0)]
+        [ValidateLength(1, 64)]
+        [string]$Description,
+        #Maximums users of the new table   
+        [Parameter(Mandatory = $true, Position = 1)]
+        [ValidateRange(1, 5000)]
+        [string]$MaxUsers
+    )
+    
+    # First thing we need to do is get a new TableId
+    try {
+        if ($uxSession) {
+            [int]$uxLocalRegistrarTableId = (Get-UxLocalRegistrarTable -uxSession $uxSession | Select-Object -ExpandProperty id | Measure-Object -Maximum).Maximum + 1 
+        }
+        else {
+            [int]$uxLocalRegistrarTableId = (Get-UxLocalRegistrarTable | Select-Object -ExpandProperty id | Measure-Object -Maximum).Maximum + 1 
+        }
+    }
+    catch {
+        Throw "Unable to get a new table id"
+    }
+
+    
+    #Lets create the information to upload, this nees to be in HTTP format for the PUT
+    $HTTPDescription = "Description=$Description"
+
+    $ResourceSplat = @{
+        resource      = "siplocalregistrartable"
+        index         = $uxLocalRegistrarTableId
+        ReturnElement = "siplocalregistrartable"
+        Arguments     = $HTTPDescription
+    }
+    if ($uxSession) { $ResourceSplat.uxSession = $uxSession }
+
+    Write-Verbose "Submitting Data"
+    Write-verbose "Returning the updated table"
+    $msg = "Adding A New Entry to siplocalregistrartable Table on the Gateway with ID $uxLocalRegistrarTableId"
+    if ($PSCmdlet.ShouldProcess($($msg))) {
+        $Return = new-uxresource @ResourceSplat -WhatIf:$PSBoundParameters.ContainsKey('WhatIf') -Confirm:$false      
+    }
+    Write-Output $return
+
 }
 
